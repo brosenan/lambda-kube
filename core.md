@@ -21,6 +21,18 @@ The `pod` function creates a pod with no containers.
      :spec {:containers []}})
 
 ```
+`pod` can take a third argument with additional spec parameters.
+```clojure
+(fact
+ (kdi/pod :foo {:app :bar} {:foo :bar})
+ => {:apiVersion "v1"
+     :kind "Pod"
+     :metadata {:name :foo
+                :labels {:app :bar}}
+     :spec {:containers []
+            :foo :bar}})
+
+```
 The `deployment` function creates a deployment, based on the given
 pod as template. The deployment takes its name from the given pod,
 and removes the name from the template.
@@ -134,7 +146,7 @@ paths within the given containers.
  (-> (kdi/pod :foo {:bar :baz})
      (kdi/add-container :bar "some-image")
      (kdi/add-container :baz "some-other-image")
-     (kdi/stateful-set 5)
+     (kdi/stateful-set 5 {:additional-arg 123})
      (kdi/add-volume-claim-template :vol-name
                                     ;; Spec
                                     {:accessModes ["ReadWriteOnce"]
@@ -165,7 +177,8 @@ paths within the given containers.
             [{:metadata {:name :vol-name}
               :spec {:accessModes ["ReadWriteOnce"]
                      :storageClassName :my-storage-class
-                     :resources {:requests {:storage "1Gi"}}}}]}})
+                     :resources {:requests {:storage "1Gi"}}}}]
+            :additional-arg 123}})
 
 ```
 If the `:volumeMounts` entry already exists in the container, the
@@ -226,7 +239,7 @@ provides takes its spec as argument.
                            :targetPort 9376}]}))
  => [{:apiVersion "apps/v1"
       :kind "Deployment"
-      :metadata {:labels {:app :nginx} :name :foo}
+      :metadata {:labels {:app :nginx} :name :nginx-deployment}
       :spec {:replicas 3
              :selector {:matchLabels {:app :nginx}}
              :template {:metadata {:labels {:app :nginx}}
@@ -235,7 +248,7 @@ provides takes its spec as argument.
                                              :ports [{:containerPort 80}]}]}}}}
      {:kind "Service"
       :apiVersion "v1"
-      :metadata {:name :foo}
+      :metadata {:name :nginx-deployment}
       :spec
       {:selector {:app :nginx}
        :ports [{:protocol :TCP
@@ -258,7 +271,7 @@ controller's template.
  => [{:apiVersion "apps/v1"
       :kind "Deployment"
       :metadata {:labels {:app :nginx}
-                 :name :foo}
+                 :name :nginx-deployment}
       :spec {:replicas 3
              :selector {:matchLabels {:app :nginx}}
              :template
@@ -272,7 +285,7 @@ controller's template.
                        :ports [{:containerPort 3333}]}]}}}}
      {:kind "Service"
       :apiVersion "v1"
-      :metadata {:name :foo}
+      :metadata {:name :nginx-deployment}
       :spec
       {:selector {:app :nginx}
        :clusterIP :None
@@ -288,6 +301,18 @@ controller's template.
 '(println (-> (kdi/pod :nginx-deployment {:app :nginx})
              (kdi/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
              (kdi/deployment 3)
+             (kdi/expose-headless)
+             (to-yaml)))
+
+(println (-> (kdi/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
+             (kdi/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
+                                                                             :name "web"}]})
+             (kdi/stateful-set 3)
+             (kdi/add-volume-claim-template :www
+                                            {:accessModes ["ReadWriteOnce"]
+                                             :storageClassName :my-storage-class
+                                             :resources {:requests {:storage "1Gi"}}}
+                                            {:nginx "/usr/share/nginx/html"})
              (kdi/expose-headless)
              (to-yaml)))
 ```

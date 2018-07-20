@@ -1,11 +1,15 @@
 (ns kubedi.core)
 
-(defn pod [name labels]
-  {:apiVersion "v1"
-   :kind "Pod"
-   :metadata {:name :foo
-              :labels labels}
-   :spec {:containers []}})
+(defn pod
+  ([name labels options]
+   {:apiVersion "v1"
+    :kind "Pod"
+    :metadata {:name name
+               :labels labels}
+    :spec (-> options
+              (merge {:containers []}))})
+  ([name labels]
+   (pod name labels {})))
 
 (defn deployment [pod replicas]
   (let [name (-> pod :metadata :name)
@@ -21,21 +25,25 @@
             :selector {:matchLabels labels}
             :template template}}))
 
-(defn stateful-set [pod replicas]
-  (let [name (-> pod :metadata :name)
-        labels (-> pod :metadata :labels)
-        template (-> pod
-                     (update :metadata dissoc :name)
-                     (dissoc :apiVersion :kind))]
-    {:apiVersion "apps/v1"
-     :kind "StatefulSet"
-     :metadata {:name name
-                :labels labels}
-     :spec {:replicas replicas
-            :selector
-            {:matchLabels labels}
-            :template template
-            :volumeClaimTemplates []}}))
+(defn stateful-set
+  ([pod replicas options]
+   (let [name (-> pod :metadata :name)
+         labels (-> pod :metadata :labels)
+         template (-> pod
+                      (update :metadata dissoc :name)
+                      (dissoc :apiVersion :kind))]
+     {:apiVersion "apps/v1"
+      :kind "StatefulSet"
+      :metadata {:name name
+                 :labels labels}
+      :spec (-> options
+                (merge {:replicas replicas
+                        :selector
+                        {:matchLabels labels}
+                        :template template
+                        :volumeClaimTemplates []}))}))
+  ([pod replicas]
+   (stateful-set pod replicas {})))
 
 (defn add-container
   ([pod name image options]
