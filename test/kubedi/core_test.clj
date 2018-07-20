@@ -39,6 +39,28 @@
               [{:name :bar
                 :image "some-image"}]}}}})
 
+;; The `stateful-set` function wraps the given pod with a Kubernetes
+;; stateful set.
+(fact
+ (-> (kdi/pod :foo {:bar :baz})
+     (kdi/add-container :bar "some-image")
+     (kdi/stateful-set 5))
+ => {:apiVersion "apps/v1"
+     :kind "StatefulSet"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 5
+            :selector
+            {:matchLabels {:bar :baz}}
+            :template
+            {:metadata
+             {:labels {:bar :baz}}
+             :spec
+             {:containers
+              [{:name :bar
+                :image "some-image"}]}}
+            :volumeClaimTemplates []}})
+
 ;; # Modifier Functions
 
 ;; The following functions augment basic API objects by adding
@@ -90,6 +112,83 @@
                                 {:name :FOO
                                  :value "BAR"}]}]}})
 
+;; The `add-volume-claim-template` function takes a stateful-set, adds
+;; a volume claim template to its spec and mounts it to the given
+;; paths within the given containers.
+(fact
+ (-> (kdi/pod :foo {:bar :baz})
+     (kdi/add-container :bar "some-image")
+     (kdi/add-container :baz "some-other-image")
+     (kdi/stateful-set 5)
+     (kdi/add-volume-claim-template :vol-name
+                                    ;; Spec
+                                    {:accessModes ["ReadWriteOnce"]
+                                     :storageClassName :my-storage-class
+                                     :resources {:requests {:storage "1Gi"}}}
+                                    ;; Mounts
+                                    {:bar "/var/lib/foo"}))
+ => {:apiVersion "apps/v1"
+     :kind "StatefulSet"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 5
+            :selector
+            {:matchLabels {:bar :baz}}
+            :template
+            {:metadata
+             {:labels {:bar :baz}}
+             :spec
+             {:containers
+              [{:name :bar
+                :image "some-image"
+                :volumeMounts
+                [{:name :vol-name
+                  :mountPath "/var/lib/foo"}]}
+               {:name :baz
+                :image "some-other-image"}]}}
+            :volumeClaimTemplates
+            [{:metadata {:name :vol-name}
+              :spec {:accessModes ["ReadWriteOnce"]
+                     :storageClassName :my-storage-class
+                     :resources {:requests {:storage "1Gi"}}}}]}})
+
+;; If the `:volumeMounts` entry already exists in the container, the
+;; new mount is appended.
+(fact
+ (-> (kdi/pod :foo {:bar :baz})
+     (kdi/add-container :bar "some-image" {:volumeMounts [{:foo :bar}]})
+     (kdi/stateful-set 5)
+     (kdi/add-volume-claim-template :vol-name
+                                    ;; Spec
+                                    {:accessModes ["ReadWriteOnce"]
+                                     :storageClassName :my-storage-class
+                                     :resources {:requests {:storage "1Gi"}}}
+                                    ;; Mounts
+                                    {:bar "/var/lib/foo"}))
+ => {:apiVersion "apps/v1"
+     :kind "StatefulSet"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 5
+            :selector
+            {:matchLabels {:bar :baz}}
+            :template
+            {:metadata
+             {:labels {:bar :baz}}
+             :spec
+             {:containers
+              [{:name :bar
+                :image "some-image"
+                :volumeMounts
+                [{:foo :bar}
+                 {:name :vol-name
+                  :mountPath "/var/lib/foo"}]}]}}
+            :volumeClaimTemplates
+            [{:metadata {:name :vol-name}
+              :spec {:accessModes ["ReadWriteOnce"]
+                     :storageClassName :my-storage-class
+                     :resources {:requests {:storage "1Gi"}}}}]}})
+
 ;; # Exposure Functions
 
 ;; There are several ways to expose a service under Kubernetes. The
@@ -125,6 +224,41 @@
                 :targetPort 9376}]}}])
 
 
+;; The `expose-headless` wraps the given controller (deployment,
+;; statefulset) with a headless service. The service exposes all the
+;; ports listed as `:containerPort`s in all the containers in the
+;; controller's template.
+(fact
+ (-> (kdi/pod :nginx-deployment {:app :nginx})
+     (kdi/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+     (kdi/add-container :sidecar "my-sidecar" {:ports [{:containerPort 3333}]})
+     (kdi/deployment 3)
+     (kdi/expose-headless))
+ => [{:apiVersion "apps/v1"
+      :kind "Deployment"
+      :metadata {:labels {:app :nginx}
+                 :name :foo}
+      :spec {:replicas 3
+             :selector {:matchLabels {:app :nginx}}
+             :template
+             {:metadata {:labels {:app :nginx}}
+              :spec {:containers
+                     [{:image "nginx:1.7.9"
+                       :name :nginx
+                       :ports [{:containerPort 80}]}
+                      {:image "my-sidecar"
+                       :name :sidecar
+                       :ports [{:containerPort 3333}]}]}}}}
+     {:kind "Service"
+      :apiVersion "v1"
+      :metadata {:name :foo}
+      :spec
+      {:selector {:app :nginx}
+       :clusterIP :None
+       :ports [{:port 80}
+               {:port 3333}]}}])
+
+
 (defn to-yaml [objs]
   (->> objs
        (map #(yaml/generate-string % :dumper-options {:flow-style :block :scalar-style :plain}))
@@ -133,8 +267,5 @@
 '(println (-> (kdi/pod :nginx-deployment {:app :nginx})
              (kdi/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
              (kdi/deployment 3)
-             (kdi/expose {:type :NodePort
-                          :ports [{:port 80
-                                   :targetPort 80
-                                   :protocol :TCP}]})
+             (kdi/expose-headless)
              (to-yaml)))
