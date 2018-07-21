@@ -203,7 +203,7 @@
                      :storageClassName :my-storage-class
                      :resources {:requests {:storage "1Gi"}}}}]}})
 
-;; # Update Functions
+;; ## Update Functions
 
 ;; While `add-*` functions are good for creating new API objects, we
 ;; sometimes need to update existing ones. For example, given a
