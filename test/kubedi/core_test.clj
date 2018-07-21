@@ -62,6 +62,7 @@
      :spec {:replicas 5
             :selector
             {:matchLabels {:bar :baz}}
+            :serviceName :foo
             :template
             {:metadata
              {:labels {:bar :baz}}
@@ -144,6 +145,7 @@
      :spec {:replicas 5
             :selector
             {:matchLabels {:bar :baz}}
+            :serviceName :foo
             :template
             {:metadata
              {:labels {:bar :baz}}
@@ -183,6 +185,7 @@
      :spec {:replicas 5
             :selector
             {:matchLabels {:bar :baz}}
+            :serviceName :foo
             :template
             {:metadata
              {:labels {:bar :baz}}
@@ -199,6 +202,74 @@
               :spec {:accessModes ["ReadWriteOnce"]
                      :storageClassName :my-storage-class
                      :resources {:requests {:storage "1Gi"}}}}]}})
+
+;; # Update Functions
+
+;; While `add-*` functions are good for creating new API objects, we
+;; sometimes need to update existing ones. For example, given a
+;; deployment, we sometimes want to add an environment to one of the
+;; containers in the template.
+
+;; `update-*` work in a similar manner to Clojure's `update`
+;; function. It takes an object to be augmented, an augmentation
+;; function which takes the object to update as its first argument,
+;; and additional arguments for that function. Then it applies the
+;; augmentation function on a portion of the given object, and returns
+;; the updated object.
+
+;; `update-template` operates on controllers (deployments,
+;; stateful-sets, etc). It takes a pod-modifying function and applies
+;; it to the template. For example, we can use it to add a container
+;; to a pod already within a deployment.
+(fact
+ (-> (kdi/pod :foo {:bar :baz})
+     (kdi/deployment 3)
+     ;; The original pod has no containers. We add one now.
+     (kdi/update-template kdi/add-container :bar "some-image"))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector
+            {:matchLabels {:bar :baz}}
+            :template
+            {:metadata
+             {:labels {:bar :baz}}
+             :spec
+             {:containers
+              [{:name :bar
+                :image "some-image"}]}}}})
+
+;; `update-container` works on a pod. It takes a container name, and
+;; applies the augmentation function with its arguments on the
+;; container with the given name. It can be used in conjunction with
+;; `update-template` to operate on a controller.
+(fact
+ (-> (kdi/pod :foo {:bar :baz})
+     (kdi/add-container :bar "some-image")
+     (kdi/add-container :baz "some-other-image")
+     (kdi/deployment 3)
+     ;; We add an environment to a container.
+     (kdi/update-template kdi/update-container :bar kdi/add-env {:FOO "BAR"}))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector
+            {:matchLabels {:bar :baz}}
+            :template
+            {:metadata
+             {:labels {:bar :baz}}
+             :spec
+             {:containers
+              [{:name :bar
+                :image "some-image"
+                :env [{:name :FOO
+                       :value "BAR"}]}
+               {:name :baz
+                :image "some-other-image"}]}}}})
 
 ;; # Exposure Functions
 
@@ -238,10 +309,11 @@
 ;; The `expose-headless` wraps the given controller (deployment,
 ;; statefulset) with a headless service. The service exposes all the
 ;; ports listed as `:containerPort`s in all the containers in the
-;; controller's template.
+;; controller's template. For ports with a `:name`, the name is also
+;; copied over.
 (fact
  (-> (kdi/pod :nginx-deployment {:app :nginx})
-     (kdi/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+     (kdi/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80 :name :web}]})
      (kdi/add-container :sidecar "my-sidecar" {:ports [{:containerPort 3333}]})
      (kdi/deployment 3)
      (kdi/expose-headless))
@@ -256,7 +328,8 @@
               :spec {:containers
                      [{:image "nginx:1.7.9"
                        :name :nginx
-                       :ports [{:containerPort 80}]}
+                       :ports [{:containerPort 80
+                                :name :web}]}
                       {:image "my-sidecar"
                        :name :sidecar
                        :ports [{:containerPort 3333}]}]}}}}
@@ -266,9 +339,47 @@
       :spec
       {:selector {:app :nginx}
        :clusterIP :None
-       :ports [{:port 80}
+       :ports [{:port 80 :name :web}
                {:port 3333}]}}])
 
+
+;; # Dependency Injection
+
+;; Functions such as `pod` and `deployment` help build Kubernetes API
+;; objects. If we consider Kubedi to be a language, these are the
+;; _common nouns_. They can be used to build general Pods,
+;; Deployments, StatefulSets, etc, and can be used to develop other
+;; functions that create general things such as a generic Redis
+;; database, or a generic Nginx deployment, which can also be
+;; represented as a function.
+
+;; However, when we go down to the task of defining a system, we need
+;; a way to define _proper nouns_, such as _our_ Redis database and
+;; _our_ Nginx deployment.
+
+;; This distinction is important because when creating a generic Nginx
+;; deployment, it stands on its own, and is unrelated to any Redis
+;; database that may or may not be used in conjunction with
+;; it. However, when we build our application, which happens to have
+;; some, e.g., PHP code running on top of Nginx, which happens to
+;; require a database, this is when we need the two to be
+;; connected. We need to connect them by, e.g., adding environment
+;; variables to the Nginx container, so that PHP code that runs over
+;; it will be able to connect to the database.
+
+;; This is where dependency injection comes in. Dependency Injection
+;; (DI) is a general concept that allows developers to define proper
+;; nouns in their software in an incremental way. It starts with some
+;; configuration, which provides arbitrary settings. Then a set of
+;; resources is being defined. Each such resource may depend on other
+;; resources, including configuration.
+
+;; Our implementation of DI, resources are identified with symbols,
+;; corresponding to the proper nouns. The macro `defresource` defines
+;; a new resource. It takes a name, a vector of arguments, which are
+;; the names of its dependencies, and a body of a function.
+
+;; # Turning this to Usable YAML Files
 
 (defn to-yaml [objs]
   (->> objs
@@ -281,13 +392,12 @@
              (kdi/expose-headless)
              (to-yaml)))
 
-(println (-> (kdi/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
+'(println (-> (kdi/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
              (kdi/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
                                                                              :name "web"}]})
              (kdi/stateful-set 3)
              (kdi/add-volume-claim-template :www
                                             {:accessModes ["ReadWriteOnce"]
-                                             :storageClassName :my-storage-class
                                              :resources {:requests {:storage "1Gi"}}}
                                             {:nginx "/usr/share/nginx/html"})
              (kdi/expose-headless)

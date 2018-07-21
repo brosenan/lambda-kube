@@ -40,6 +40,7 @@
                 (merge {:replicas replicas
                         :selector
                         {:matchLabels labels}
+                        :serviceName name
                         :template template
                         :volumeClaimTemplates []}))}))
   ([pod replicas]
@@ -83,6 +84,17 @@
                                                        :spec spec})
         (update-in [:spec :template :spec :containers] #(map add-mount %)))))
 
+(defn update-template [ctrl f & args]
+  (apply update-in ctrl [:spec :template] f args))
+
+(defn update-container [pod cont-name f & args]
+  (let [update-cont (fn [cont]
+                      (if (= (:name cont) cont-name)
+                        (apply f cont args)
+                        ;; else
+                        cont))]
+    (update-in pod [:spec :containers] #(map update-cont %))))
+
 (defn expose [depl options]
   [depl
    {:apiVersion "v1"
@@ -94,5 +106,9 @@
 (defn expose-headless [ctrl]
   (expose ctrl {:ports (for [cont (-> ctrl :spec :template :spec :containers)
                              port (-> cont :ports)]
-                         {:port (-> port :containerPort)})
+                         (if (contains? port :name)
+                           {:port (-> port :containerPort)
+                            :name (-> port :name)}
+                           ;; else
+                           {:port (-> port :containerPort)}))
                 :clusterIP :None}))
