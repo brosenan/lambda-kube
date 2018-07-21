@@ -375,9 +375,91 @@
 ;; resources, including configuration.
 
 ;; Our implementation of DI, resources are identified with symbols,
-;; corresponding to the proper nouns. The macro `defresource` defines
-;; a new resource. It takes a name, a vector of arguments, which are
-;; the names of its dependencies, and a body of a function.
+;; corresponding to the proper nouns. These nouns are defined in
+;; functions, named _modules_, which take a single parameter -- an
+;; _injector_ (marked as `$` by convention), and augment it by adding
+;; new rules to it.
+(defn module1 [$]
+  (-> $
+      (kdi/rule :my-deployment []
+                (fn []
+                  [;; An API object to be deployed
+                   (-> (kdi/pod :my-pod {:app :my-app})
+                       (kdi/deployment 3))
+                   ;; An arbitrary value that represents it.
+                   {:foo :bar}]))))
+
+;; This module defines one `rule`, defining `:my-deployment`. The
+;; empty vector indicates no dependencies. The function provides the
+;; logic creating this resource. It returns a vector with two
+;; elements. The first is the API object(s) that represent this
+;; resource, and the second is a value that provides information about
+;; this resource. The latter will be passed to rules that are based on
+;; this resource.
+
+;; With this module in place, we can create the deployment by:
+;; 1. Creating an empty injector, by calling the `injector` function (which takes a configuration map, which we will leave empty),
+;; 2. Calling the module function to augment this injector (module functions would typically be threaded on the injector).
+;; 3. Calling `get-resource` to get API objects for the resource and everything it is based on.
+(fact
+ (-> (kdi/injector {})
+     module1
+     (kdi/get-resource :my-deployment))
+ => [[(-> (kdi/pod :my-pod {:app :my-app})
+          (kdi/deployment 3))]
+     {:foo :bar}])
+
+;; Dependencies provided to the `rule` function are resolved before
+;; the function is called. For example, imagine we would like to make
+;; the number of replicas parametric, we can make it a dependency.
+(defn module2 [$]
+  (-> $
+      (kdi/rule :my-deployment [:my-depl-num-replicas]
+                (fn [num-replicas]
+                  [(-> (kdi/pod :my-pod {:app :my-app})
+                       (kdi/deployment num-replicas))
+                   {:foo :bar}]))))
+
+;; Now we can provide this parameter in the config we provide the
+;; `injector` function.
+(fact
+ (-> (kdi/injector {:my-depl-num-replicas 5})
+     module2
+     (kdi/get-resource :my-deployment))
+ => [[(-> (kdi/pod :my-pod {:app :my-app})
+          (kdi/deployment 5))]
+     {:foo :bar}])
+
+;; Rules can depend on one another. For example, in the following
+;; module the pod we define adds the description map we got from the
+;; `:my-deployment` as environment for its container.
+(defn module3 [$]
+  (-> $
+      (kdi/rule :my-pod [:my-deployment]
+                (fn [my-depl]
+                  [(-> (kdi/pod :my-pod {:app :my-app})
+                       (kdi/add-container :foo "foo-image"
+                                          (-> {}
+                                              (kdi/add-env my-depl))))
+                   {:pod-name :my-pod}]))))
+
+;; Now, if we create an injector based on rules for both `:my-pod` and
+;; `:my-deployment`, when we request `:my-pod` we will get both the
+;; deployment and the pod's API objects.
+(fact
+ (-> (kdi/injector {})
+     module1
+     module3
+     (kdi/get-resource :my-pod))
+ => [[;; The deployment
+      (-> (kdi/pod :my-pod {:app :my-app})
+          (kdi/deployment 5))
+      ;; The pod
+      (-> (kdi/pod :my-pod {:app :my-app})
+          (kdi/add-container :foo "foo-image"
+                             (-> {}
+                                 (kdi/add-env {:foo :bar}))))]
+     {:pod-name :my-pod}])
 
 ;; # Turning this to Usable YAML Files
 

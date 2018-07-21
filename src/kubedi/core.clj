@@ -112,3 +112,16 @@
                            ;; else
                            {:port (-> port :containerPort)}))
                 :clusterIP :None}))
+
+(defn injector [config]
+  [config {}])
+
+(defn rule [$ res deps func]
+  (update $ 1 assoc res [deps func]))
+
+(defn get-resource [$ res]
+  (let [[config rules] $
+        [deps func] (rules res)
+        deps (map config deps)
+        [api-obj desc] (apply func deps)]
+    [[api-obj] desc]))
