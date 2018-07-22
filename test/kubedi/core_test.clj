@@ -77,6 +77,8 @@
 ;; The following functions augment basic API objects by adding
 ;; content. They always take the API object as a first argument.
 
+;; ## Add Functions
+
 ;; The `add-container` function adds a container to a pod. The
 ;; function takes the container name and the image to be used as
 ;; explicit parameters, and an optional map with additional parameters.
@@ -383,83 +385,88 @@
   (-> $
       (kdi/rule :my-deployment []
                 (fn []
-                  [;; An API object to be deployed
-                   (-> (kdi/pod :my-pod {:app :my-app})
-                       (kdi/deployment 3))
-                   ;; An arbitrary value that represents it.
-                   {:foo :bar}]))))
+                  (-> (kdi/pod :my-pod {:app :my-app})
+                      (kdi/deployment 3))))))
 
-;; This module defines one `rule`, defining `:my-deployment`. The
-;; empty vector indicates no dependencies. The function provides the
-;; logic creating this resource. It returns a vector with two
-;; elements. The first is the API object(s) that represent this
-;; resource, and the second is a value that provides information about
-;; this resource. The latter will be passed to rules that are based on
-;; this resource.
+;; This module uses the `rule` function to define a single _rule_. A
+;; rule has a _name_, a vector of _dependencies_, and a function that
+;; takes the dependency values and returns an API object. In this
+;; case, the name is `:my-deployment`, there are no dependencies, and
+;; the API object is a deployment of three pods.
 
-;; With this module in place, we can create the deployment by:
-;; 1. Creating an empty injector, by calling the `injector` function (which takes a configuration map, which we will leave empty),
-;; 2. Calling the module function to augment this injector (module functions would typically be threaded on the injector).
-;; 3. Calling `get-resource` to get API objects for the resource and everything it is based on.
+;; The `injector` function creates an injector based on the given
+;; configuration. This injector can be passed to the module to add the
+;; rules it defines. Then the function `get-deployable` to get all the
+;; API objects in the system.
 (fact
  (-> (kdi/injector {})
-     module1
-     (kdi/get-resource :my-deployment))
- => [[(-> (kdi/pod :my-pod {:app :my-app})
-          (kdi/deployment 3))]
-     {:foo :bar}])
+     (module1)
+     (kdi/get-deployable))
+ => [(-> (kdi/pod :my-pod {:app :my-app})
+         (kdi/deployment 3))])
 
-;; Dependencies provided to the `rule` function are resolved before
-;; the function is called. For example, imagine we would like to make
-;; the number of replicas parametric, we can make it a dependency.
+;; Rules may depend on configuration parameters. These parameters need
+;; to be listed as dependencies, and then, if they exist in the
+;; injector's configuration, their values are passed to the
+;; function. In the following example, the module has two rules:
+;; `:my-deployment`, and `:not-going-to-work`. The former is similar
+;; to the one defined in `module1`, but takes the number of replicas
+;; from the configuration. The latter depends on the parameter
+;; `:does-not-exist`.
 (defn module2 [$]
   (-> $
-      (kdi/rule :my-deployment [:my-depl-num-replicas]
+      (kdi/rule :not-going-to-work [:does-not-exist]
+                (fn [does-not-exist]
+                  (kdi/pod :no-pod {:app :no-app})))
+      (kdi/rule :my-deployment [:my-deployment-num-replicas]
                 (fn [num-replicas]
-                  [(-> (kdi/pod :my-pod {:app :my-app})
-                       (kdi/deployment num-replicas))
-                   {:foo :bar}]))))
+                  (-> (kdi/pod :my-pod {:app :my-app})
+                      (kdi/deployment num-replicas))))))
 
-;; Now we can provide this parameter in the config we provide the
-;; `injector` function.
+;; Now, if we provide a configuration that only contains
+;; `:my-deployment-num-replicas`, but not `:not-going-to-work`,
+;; `:my-deployment` will be created, but not `:not-going-to-work`.
 (fact
- (-> (kdi/injector {:my-depl-num-replicas 5})
-     module2
-     (kdi/get-resource :my-deployment))
- => [[(-> (kdi/pod :my-pod {:app :my-app})
-          (kdi/deployment 5))]
-     {:foo :bar}])
+ (-> (kdi/injector {:my-deployment-num-replicas 5})
+     (module2)
+     (kdi/get-deployable))
+ => [(-> (kdi/pod :my-pod {:app :my-app})
+         (kdi/deployment 5))])
 
-;; Rules can depend on one another. For example, in the following
-;; module the pod we define adds the description map we got from the
-;; `:my-deployment` as environment for its container.
+;; If the rule emits a list (e.g., in the case of a service attached
+;; to a deployment), the list is flattened.
 (defn module3 [$]
   (-> $
-      (kdi/rule :my-pod [:my-deployment]
-                (fn [my-depl]
-                  [(-> (kdi/pod :my-pod {:app :my-app})
-                       (kdi/add-container :foo "foo-image"
-                                          (-> {}
-                                              (kdi/add-env my-depl))))
-                   {:pod-name :my-pod}]))))
+      (kdi/rule :my-service [:my-deployment-num-replicas]
+                (fn [num-replicas]
+                  (-> (kdi/pod :my-service {:app :my-app})
+                      (kdi/deployment num-replicas)
+                      (kdi/expose {}))))))
 
-;; Now, if we create an injector based on rules for both `:my-pod` and
-;; `:my-deployment`, when we request `:my-pod` we will get both the
-;; deployment and the pod's API objects.
 (fact
- (-> (kdi/injector {})
-     module1
-     module3
-     (kdi/get-resource :my-pod))
- => [[;; The deployment
-      (-> (kdi/pod :my-pod {:app :my-app})
-          (kdi/deployment 5))
-      ;; The pod
-      (-> (kdi/pod :my-pod {:app :my-app})
-          (kdi/add-container :foo "foo-image"
-                             (-> {}
-                                 (kdi/add-env {:foo :bar}))))]
-     {:pod-name :my-pod}])
+ (-> (kdi/injector {:my-deployment-num-replicas 5})
+     (module3)
+     (kdi/get-deployable))
+ => (-> (kdi/pod :my-service {:app :my-app})
+        (kdi/deployment 5)
+        (kdi/expose {})))
+
+;; Resources may depend on one another. The following module depends
+;; on `:my-service`.
+(defn module4 [$]
+  (-> $
+      (kdi/rule :my-pod [:my-service]
+                (fn [my-service]
+                  (kdi/pod :my-pod {:app :my-app})))))
+(fact
+ (-> (kdi/injector {:my-deployment-num-replicas 5})
+     (module4)
+     (module3)
+     (kdi/get-deployable))
+ => (concat [(kdi/pod :my-pod {:app :my-app})]
+            (-> (kdi/pod :my-service {:app :my-app})
+                (kdi/deployment 5)
+                (kdi/expose {}))))
 
 ;; # Turning this to Usable YAML Files
 

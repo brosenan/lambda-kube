@@ -1,4 +1,6 @@
-(ns kubedi.core)
+(ns kubedi.core
+  (:require [loom.graph :refer [digraph]]
+            [loom.alg :refer [topsort]]))
 
 (defn pod
   ([name labels options]
@@ -114,14 +116,50 @@
                 :clusterIP :None}))
 
 (defn injector [config]
-  [config {}])
+  [config []])
 
 (defn rule [$ res deps func]
-  (update $ 1 assoc res [deps func]))
-
-(defn get-resource [$ res]
   (let [[config rules] $
-        [deps func] (rules res)
-        deps (map config deps)
-        [api-obj desc] (apply func deps)]
-    [[api-obj] desc]))
+        rules (conj rules [func deps res])]
+    [config rules]))
+
+(defn get-resource [$ res])
+
+(defn- append [list obj]
+  (if (sequential? obj)
+    (concat list obj)
+    ;; else
+    (conj list obj)))
+
+(defn- sorted-rules [rules]
+  (let [rulemap (into {} (for [[func deps res] rules]
+                           [res [func deps res]]))
+        g (apply digraph (concat
+                          ;; Vertices
+                          (for [[func deps res] rules]
+                            res)
+                          ;; Edges
+                          (for [[func deps res] rules
+                                d deps]
+                            [d res])))]
+    (map rulemap (topsort g))))
+
+(defn get-deployable [$]
+  (let [[config rules] $
+        rules (sorted-rules rules)]
+    (loop [rules rules
+           config config
+           out []]
+      (if (empty? rules)
+        out
+        ;; else
+        (let [rule (first rules)]
+          (if (nil? rule)
+            (recur (rest rules) config out)
+            ;; else
+            (let [[func deps res] rule
+                  [out config] (if (every? (partial contains? config) deps)
+                                 [(append out (apply func (map config deps))) (assoc config res :foo)]
+                                 ;; else
+                                 [out config])]
+              (recur (rest rules) config out))))))))

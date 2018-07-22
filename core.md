@@ -87,6 +87,8 @@ stateful set.
 The following functions augment basic API objects by adding
 content. They always take the API object as a first argument.
 
+## Add Functions
+
 The `add-container` function adds a container to a pod. The
 function takes the container name and the image to be used as
 explicit parameters, and an optional map with additional parameters.
@@ -223,7 +225,7 @@ new mount is appended.
                      :resources {:requests {:storage "1Gi"}}}}]}})
 
 ```
-# Update Functions
+## Update Functions
 
 While `add-*` functions are good for creating new API objects, we
 sometimes need to update existing ones. For example, given a
@@ -403,10 +405,109 @@ resources is being defined. Each such resource may depend on other
 resources, including configuration.
 
 Our implementation of DI, resources are identified with symbols,
-corresponding to the proper nouns. The macro `defresource` defines
-a new resource. It takes a name, a vector of arguments, which are
-the names of its dependencies, and a body of a function.
+corresponding to the proper nouns. These nouns are defined in
+functions, named _modules_, which take a single parameter -- an
+_injector_ (marked as `$` by convention), and augment it by adding
+new rules to it.
+```clojure
+(defn module1 [$]
+  (-> $
+      (kdi/rule :my-deployment []
+                (fn []
+                  (-> (kdi/pod :my-pod {:app :my-app})
+                      (kdi/deployment 3))))))
 
+```
+This module uses the `rule` function to define a single _rule_. A
+rule has a _name_, a vector of _dependencies_, and a function that
+takes the dependency values and returns an API object. In this
+case, the name is `:my-deployment`, there are no dependencies, and
+the API object is a deployment of three pods.
+
+The `injector` function creates an injector based on the given
+configuration. This injector can be passed to the module to add the
+rules it defines. Then the function `get-deployable` to get all the
+API objects in the system.
+```clojure
+(fact
+ (-> (kdi/injector {})
+     (module1)
+     (kdi/get-deployable))
+ => [(-> (kdi/pod :my-pod {:app :my-app})
+         (kdi/deployment 3))])
+
+```
+Rules may depend on configuration parameters. These parameters need
+to be listed as dependencies, and then, if they exist in the
+injector's configuration, their values are passed to the
+function. In the following example, the module has two rules:
+`:my-deployment`, and `:not-going-to-work`. The former is similar
+to the one defined in `module1`, but takes the number of replicas
+from the configuration. The latter depends on the parameter
+`:does-not-exist`.
+```clojure
+(defn module2 [$]
+  (-> $
+      (kdi/rule :not-going-to-work [:does-not-exist]
+                (fn [does-not-exist]
+                  (kdi/pod :no-pod {:app :no-app})))
+      (kdi/rule :my-deployment [:my-deployment-num-replicas]
+                (fn [num-replicas]
+                  (-> (kdi/pod :my-pod {:app :my-app})
+                      (kdi/deployment num-replicas))))))
+
+```
+Now, if we provide a configuration that only contains
+`:my-deployment-num-replicas`, but not `:not-going-to-work`,
+`:my-deployment` will be created, but not `:not-going-to-work`.
+```clojure
+(fact
+ (-> (kdi/injector {:my-deployment-num-replicas 5})
+     (module2)
+     (kdi/get-deployable))
+ => [(-> (kdi/pod :my-pod {:app :my-app})
+         (kdi/deployment 5))])
+
+```
+If the rule emits a list (e.g., in the case of a service attached
+to a deployment), the list is flattened.
+```clojure
+(defn module3 [$]
+  (-> $
+      (kdi/rule :my-service [:my-deployment-num-replicas]
+                (fn [num-replicas]
+                  (-> (kdi/pod :my-service {:app :my-app})
+                      (kdi/deployment num-replicas)
+                      (kdi/expose {}))))))
+
+(fact
+ (-> (kdi/injector {:my-deployment-num-replicas 5})
+     (module3)
+     (kdi/get-deployable))
+ => (-> (kdi/pod :my-service {:app :my-app})
+        (kdi/deployment 5)
+        (kdi/expose {})))
+
+```
+Resources may depend on one another. The following module depends
+on `:my-service`.
+```clojure
+(defn module4 [$]
+  (-> $
+      (kdi/rule :my-pod [:my-service]
+                (fn [my-service]
+                  (kdi/pod :my-pod {:app :my-app})))))
+(fact
+ (-> (kdi/injector {:my-deployment-num-replicas 5})
+     (module4)
+     (module3)
+     (kdi/get-deployable))
+ => (concat [(kdi/pod :my-pod {:app :my-app})]
+            (-> (kdi/pod :my-service {:app :my-app})
+                (kdi/deployment 5)
+                (kdi/expose {}))))
+
+```
 # Turning this to Usable YAML Files
 
 ```clojure
