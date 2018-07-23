@@ -1,4 +1,4 @@
-(ns kubedi.core
+(ns lambdakube.core
   (:require [loom.graph :refer [digraph]]
             [loom.alg :refer [topsort]]))
 
