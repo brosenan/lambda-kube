@@ -116,12 +116,12 @@
                 :clusterIP :None}))
 
 (defn injector [config]
-  [config []])
+  {:config config
+   :rules []
+   :descs []})
 
 (defn rule [$ res deps func]
-  (let [[config rules] $
-        rules (conj rules [func deps res])]
-    [config rules]))
+  (update $ :rules conj [func deps res]))
 
 (defn get-resource [$ res])
 
@@ -144,9 +144,8 @@
                             [d res])))]
     (map rulemap (topsort g))))
 
-(defn get-deployable [$]
-  (let [[config rules] $
-        rules (sorted-rules rules)]
+(defn get-deployable [{:keys [config rules]}]
+  (let [rules (sorted-rules rules)]
     (loop [rules rules
            config config
            out []]
@@ -163,3 +162,5 @@
                                  ;; else
                                  [out config])]
               (recur (rest rules) config out))))))))
+
+(defn desc [])

@@ -468,6 +468,40 @@
                 (kdi/deployment 5)
                 (kdi/expose {}))))
 
+;; ## Describers and Descriptions
+
+;; When one resource depends on another, it often needs information
+;; about the other in order to perform its job properly. For example,
+;; if the dependency is a service, the resource depending on this
+;; service may need the host name and port number of that service.
+
+;; One option would be to provide the complete API object as the
+;; dependency information. However, that would defeat the purpose of
+;; using DI. The whole idea behind using DI is a decoupling between a
+;; resource and its dependencies. If we provide the API object to the
+;; rule function, we force it to know what its dependency is, and how
+;; to find information there.
+
+;; But almost any problem in computer science can be solved by adding
+;; another level of indirection (the only one that isn't is the
+;; problem of having too many levels of indirection). In our case, the
+;; extra level of indirection is provided by _describers_.
+
+;; Describers are functions that examine an API object, and extract
+;; _descriptions_. A description is a map, containing information
+;; about the object. Describers are defined inside modules, using the
+;; `desc` functions. All describers are applied to all objects. If a
+;; describer is not relevant to a certain object it may return
+;; `nil`. If it is, it should return a map with some fields
+;; representing the object.
+
+;; For example, the following module defines two describers. The first
+;; extracts the name out of any object. The second returns the port
+;; number for a service.
+(defn module5 [$]
+  (-> (kdi/desc (fn [obj]
+              {:name (-> obj :metadata :name)}))))
+
 ;; # Turning this to Usable YAML Files
 
 (defn to-yaml [objs]

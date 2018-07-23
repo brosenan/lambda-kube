@@ -60,7 +60,14 @@ files.
 Helm does not provide a real answer for this bloat. It hides the bloat
 in charts, but the charts are even more verbose than the YAML files
 they produce. Wanting to account for every possibility, real-life
-charts are bloated with many esoteric options, making it hard for
-people to really understand what they do.
+charts are bloated with many esoteric options, making them hard for
+developers to understand them and maintain them.
+
+The root cause for this is that Go Templates do not provide a good
+abstraction mechanism. What you want to have is the ability to create
+small things, each responsible for one thing, and to have the
+mechanism to compose them together. Go Templates are not good at this,
+but functional programming is.
+
 
 
