@@ -1,4 +1,4 @@
-Kubedi is a Clojure library for building inputs for Kubernetes.
+Lambda-kube is a Clojure library for building inputs for Kubernetes.
 
 # Documentation
 * [Core Library](core.md)
@@ -6,7 +6,7 @@ Kubedi is a Clojure library for building inputs for Kubernetes.
 # Rationale
 Kubernetes is a really great tool, which transforms the task of
 deploying complex systems from an IT task to a software development
-task. Kubedi takes this one step further and turns the generation of
+task. Lambda-kube takes this one step further and turns the generation of
 the YAML files which describe the deployment declaratievly, from a
 "configuration" task to a programming task.
 
@@ -25,16 +25,16 @@ are using Kubernetes. However, the files you provide are no more than
 an example. Eventually, the user will have to update these files to
 match their needs.
 
-Kubedi allows you to provide them a Clojure library, which generates
+Lambda-kube allows you to provide them a Clojure library, which generates
 these YAML files according to the recipe you design, but matching the
 parameters they provide. Being a Clojure library, it can be then
 integrated in a library they write, which integrates your database
 with their software, and potentially other microservices, each coming
-with its own Kubedi-based library.
+with its own Lambda-kube-based library.
 
 # Why Not Helm?
 The above description matches the mission of the Helm project, and
-Helm charts could indeed stand in place of Kubedi libraries. However,
+Helm charts could indeed stand in place of Lambda-kube libraries. However,
 the way I see it, Helm has two significant drawbacks.
 
 ## Text-based Templates
