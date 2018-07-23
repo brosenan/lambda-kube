@@ -495,12 +495,41 @@
 ;; `nil`. If it is, it should return a map with some fields
 ;; representing the object.
 
-;; For example, the following module defines two describers. The first
-;; extracts the name out of any object. The second returns the port
-;; number for a service.
+;; For example, the following module defines three describers. The
+;; first extracts the name out of any object. The second returns the
+;; port number for a service (or `nil` if not), and the third extracts
+;; the labels.
 (defn module5 [$]
-  (-> (lkb/desc (fn [obj]
-              {:name (-> obj :metadata :name)}))))
+  (-> $
+      (lkb/desc (fn [obj]
+                  {:name (-> obj :metadata :name)}))
+      (lkb/desc (fn [obj]
+                  (when (= (:kind "Service"))
+                    {:port (-> obj :spec :ports first :port)})))
+      (lkb/desc (fn [obj]
+                  {:labels (-> obj :metadata :labels)}))
+      (lkb/rule :first-pod []
+                (fn []
+                  (lkb/pod :my-first-pod {})))
+      (lkb/rule :second-pod [:first-pod]
+                (fn [first-pod]
+                  (lkb/pod :my-first-pod {:the-name (:name first-pod)
+                                          :the-port (:port first-pod)
+                                          :the-labels (:labels first-pod)})))))
+
+;; The module also defines two rules for two pods. The second pod
+;; depends on the first one, and populates its labels with information
+;; about the first pod (not a real-life scenario). When we call
+;; `get-deployable`, we will get both pods. The labels in the second
+;; pod will be set so that the name will be there, but not the port.
+(fact
+ (-> (lkb/injector {})
+     (module5)
+     (lkb/get-deployable))
+ => [(lkb/pod :my-first-pod {})
+     (lkb/pod :my-first-pod {:the-name :my-first-pod
+                             :the-port nil
+                             :the-labels {}})])
 
 ;; # Turning this to Usable YAML Files
 

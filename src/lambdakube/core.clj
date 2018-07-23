@@ -144,7 +144,12 @@
                             [d res])))]
     (map rulemap (topsort g))))
 
-(defn get-deployable [{:keys [config rules]}]
+(defn- describe [api-obj descs]
+  (->> descs
+       (map (fn [f] (f api-obj)))
+       (reduce merge {})))
+
+(defn get-deployable [{:keys [config rules descs]}]
   (let [rules (sorted-rules rules)]
     (loop [rules rules
            config config
@@ -158,9 +163,12 @@
             ;; else
             (let [[func deps res] rule
                   [out config] (if (every? (partial contains? config) deps)
-                                 [(append out (apply func (map config deps))) (assoc config res :foo)]
+                                 (let [api-obj (apply func (map config deps))
+                                       desc (describe api-obj descs)]
+                                   [(append out api-obj) (assoc config res desc)])
                                  ;; else
                                  [out config])]
               (recur (rest rules) config out))))))))
 
-(defn desc [])
+(defn desc [$ func]
+  (update $ :descs conj func))
