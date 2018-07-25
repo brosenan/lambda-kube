@@ -71,9 +71,18 @@ but functional programming is.
 
 # What Lambda-Kube Is
 Lambda-Kube is a Clojure library. It contains three families of functions:
-1. Functions for [defining](core.md#basic-api-object-functions) API objects, such as Pods, Deployments, Services, etc.
-2. Functions for [augmenting](core.md#modifier-functions) API object.
+1. Functions for [defining API objects](core.md#basic-api-object-functions), such as Pods, Deployments, Services, etc.
+2. Functions for [augmenting API objects](core.md#modifier-functions), adding things to them or updating their properties.
 3. Functions for [defining _modules_](core.md#dependency-injection), supporting the gradual definition of a complete system, based on [Dependency Injection (DI)](https://en.wikipedia.org/wiki/Dependency_injection).
 
+Lambda-Kube takes follows a few best practices made to make the systems you build with it maintainable.
+1. It is purely functional. It uses no side-effects and even no macros. Just plain old Clojure functions.
+3. Functions are simple and cohesive, intended to do one thing and to it well.
+2. Functions are composable. Augmentation is always done on the first argument. This makes most functions compatible with Clojure's [threading macro](https://clojuredocs.org/clojure.core/-%3E) (->).
 
-
+If a function we provide does not do exactly what you are looking for,
+you can replace it, or better yet, augment it with your own. For
+example, our `pod` function creates a very basic pod. It allows you to
+add additional fields, but if there is a pattern you want in your
+pods, and the `pod` function doesn't support it, you can (and should)
+write an augmentation function to modify the pod in any way you want.

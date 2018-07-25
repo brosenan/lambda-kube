@@ -15,7 +15,7 @@
      :kind "Pod"
      :metadata {:name :foo
                 :labels {:app :bar}}
-     :spec {:containers []}})
+     :spec {}})
 
 ;; `pod` can take a third argument with additional spec parameters.
 (fact
@@ -24,8 +24,7 @@
      :kind "Pod"
      :metadata {:name :foo
                 :labels {:app :bar}}
-     :spec {:containers []
-            :foo :bar}})
+     :spec {:foo :bar}})
 
 ;; The `deployment` function creates a deployment, based on the given
 ;; pod as template. The deployment takes its name from the given pod,
@@ -538,7 +537,7 @@
        (map #(yaml/generate-string % :dumper-options {:flow-style :block :scalar-style :plain}))
        (str/join "---\n")))
 
-(println (-> (lkb/pod :nginx-deployment {:app :nginx})
+'(println (-> (lkb/pod :nginx-deployment {:app :nginx})
              (lkb/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
              (lkb/deployment 3)
              (lkb/expose-headless)

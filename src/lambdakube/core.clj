@@ -2,14 +2,19 @@
   (:require [loom.graph :refer [digraph]]
             [loom.alg :refer [topsort]]))
 
+(defn- field-conj [m k v]
+  (if (contains? m k)
+    (update m k conj v)
+    ;; else
+    (assoc m k [v])))
+
 (defn pod
   ([name labels options]
    {:apiVersion "v1"
     :kind "Pod"
     :metadata {:name name
                :labels labels}
-    :spec (-> options
-              (merge {:containers []}))})
+    :spec options})
   ([name labels]
    (pod name labels {})))
 
@@ -53,7 +58,7 @@
    (let [container (-> options
                        (merge {:name name
                                :image image}))]
-     (update-in pod [:spec :containers] conj container)))
+     (update pod :spec field-conj :containers container)))
   ([pod name image]
    (add-container pod name image {})))
 
@@ -73,12 +78,7 @@
                     (if (contains? mounts (:name cont))
                       (let [new-mount {:mountPath (mounts (:name cont))
                                        :name name}]
-                        (if (contains? cont :volumeMounts)
-                          (-> cont
-                              (update :volumeMounts conj new-mount))
-                          ;; else
-                          (-> cont
-                              (assoc :volumeMounts [new-mount]))))
+                        (field-conj cont :volumeMounts new-mount))
                       ;; else
                       cont))]
     (-> sset
