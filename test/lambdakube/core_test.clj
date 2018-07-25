@@ -124,6 +124,28 @@
                                 {:name :FOO
                                  :value "BAR"}]}]}})
 
+;; `add-init-container` adds a new [init container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) to a pod.
+(fact
+ (-> (lkb/pod :foo {})
+     (lkb/add-init-container :bar "my-image:tag"))
+ => {:apiVersion "v1"
+     :kind "Pod"
+     :metadata {:name :foo
+                :labels {}}
+     :spec {:initContainers [{:name :bar
+                              :image "my-image:tag"}]}}
+
+ ;; And with additional params...
+ (-> (lkb/pod :foo {})
+     (lkb/add-init-container :bar "my-image:tag" {:other :params}))
+ => {:apiVersion "v1"
+     :kind "Pod"
+     :metadata {:name :foo
+                :labels {}}
+     :spec {:initContainers [{:name :bar
+                              :image "my-image:tag"
+                              :other :params}]}})
+
 ;; The `add-volume-claim-template` function takes a stateful-set, adds
 ;; a volume claim template to its spec and mounts it to the given
 ;; paths within the given containers.

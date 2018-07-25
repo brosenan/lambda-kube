@@ -73,6 +73,15 @@
       (-> container
           (assoc :env (vec envs))))))
 
+(defn add-init-container
+  ([pod name image options]
+   (let [container (-> options
+                       (merge {:name name
+                               :image image}))]
+     (update pod :spec field-conj :initContainers container)))
+  ([pod name image]
+   (add-init-container pod name image {})))
+
 (defn add-volume-claim-template [sset name spec mounts]
   (let [add-mount (fn [cont]
                     (if (contains? mounts (:name cont))
