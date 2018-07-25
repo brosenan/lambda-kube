@@ -69,5 +69,11 @@ small things, each responsible for one thing, and to have the
 mechanism to compose them together. Go Templates are not good at this,
 but functional programming is.
 
+# What Lambda-Kube Is
+Lambda-Kube is a Clojure library. It contains three families of functions:
+1. Functions for [defining](core.md#basic-api-object-functions) API objects, such as Pods, Deployments, Services, etc.
+2. Functions for [augmenting](core.md#modifier-functions) API object.
+3. Functions for [defining _modules_](core.md#dependency-injection), supporting the gradual definition of a complete system, based on [Dependency Injection (DI)](https://en.wikipedia.org/wiki/Dependency_injection).
+
 
 
