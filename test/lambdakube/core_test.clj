@@ -1,8 +1,8 @@
 (ns lambdakube.core-test
   (:require [midje.sweet :refer :all]
             [lambdakube.core :as lkb]
-            [yaml.core :as yaml]
-            [clojure.string :as str]))
+            [clojure.java.io :as io]
+            [clojure.java.shell :as sh]))
 
 ;; # Basic API Object Functions
 
@@ -552,18 +552,96 @@
                              :the-port nil
                              :the-labels {}})])
 
-;; # Turning this to Usable YAML Files
 
-(defn to-yaml [objs]
-  (->> objs
-       (map #(yaml/generate-string % :dumper-options {:flow-style :block :scalar-style :plain}))
-       (str/join "---\n")))
+;; # Utility Functions
+
+;; All the above functions are pure functions that help build
+;; Kubernetes API objects for systems. The following functions help
+;; translate these objects into a real update of the state of a
+;; Kubernetes cluster.
+
+;; `to-yaml` takes a vector of API objects and returns a YAML string
+;; acceptable by Kubernetes.
+(fact
+ (-> (lkb/pod :nginx-deployment {:app :nginx})
+     (lkb/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+     (lkb/deployment 3)
+     (lkb/expose-headless)
+     (lkb/to-yaml)) =>
+"apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - ports:
+        - containerPort: 80
+        name: nginx
+        image: nginx:1.7.9
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-deployment
+spec:
+  ports:
+  - port: 80
+  clusterIP: None
+  selector:
+    app: nginx
+")
+
+;; `kube-apply` takes a string constructed by `to-yaml` and a `.yaml`
+;; file. If the file does not exist, it creates it, and calls `kubectl
+;; apply` on it.
+(fact
+ (let [f (io/file "foo.yaml")]
+   (when (.exists f)
+     (.delete f))
+   (lkb/kube-apply "foo: bar" f) => irrelevant
+   (provided
+    (sh/sh "kubectl" "apply" "-f" "foo.yaml") => {:exit 0})
+   (.exists f) => true
+   (slurp f) => "foo: bar"))
+
+;; If the file already exists, and has the exact same content as the
+;; given string, nothing happens.
+(fact
+ (let [f (io/file "foo.yaml")]
+   (lkb/kube-apply "foo: bar" f) => irrelevant
+   (provided
+    ;; Not called
+    (sh/sh "kubectl" "apply" "-f" "foo.yaml") => {:exit 0} :times 0)))
+
+;; If the file exists, but the new content is different than what was
+;; stored in that file, the file is updated and `kubectl apply` is
+;; called.
+(fact
+ (let [f (io/file "foo.yaml")]
+   (lkb/kube-apply "foo: baz" f) => irrelevant
+   (provided
+    (sh/sh "kubectl" "apply" "-f" "foo.yaml") => {:exit 0})
+   (.exists f) => true
+   (slurp f) => "foo: baz"))
+
+;; # Turning this to Usable YAML Files
 
 '(println (-> (lkb/pod :nginx-deployment {:app :nginx})
              (lkb/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
              (lkb/deployment 3)
              (lkb/expose-headless)
-             (to-yaml)))
+             (lkb/to-yaml)))
 
 '(println (-> (lkb/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
              (lkb/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
@@ -574,4 +652,4 @@
                                              :resources {:requests {:storage "1Gi"}}}
                                             {:nginx "/usr/share/nginx/html"})
              (lkb/expose-headless)
-             (to-yaml)))
+             (lkb/to-yaml)))

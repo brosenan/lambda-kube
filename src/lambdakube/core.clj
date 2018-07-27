@@ -1,6 +1,9 @@
 (ns lambdakube.core
   (:require [loom.graph :refer [digraph]]
-            [loom.alg :refer [topsort]]))
+            [loom.alg :refer [topsort]]
+            [clojure.string :as str]
+            [yaml.core :as yaml]
+            [clojure.java.shell :as sh]))
 
 (defn- field-conj [m k v]
   (if (contains? m k)
@@ -181,3 +184,14 @@
 
 (defn desc [$ func]
   (update $ :descs conj func))
+
+(defn to-yaml [v]
+  (->> v
+       (map #(yaml/generate-string % :dumper-options {:flow-style :block :scalar-style :plain}))
+       (str/join "---\n")))
+
+(defn kube-apply [content file]
+  (when-not (and (.exists file)
+                 (= (slurp file) content))
+    (spit file content)
+    (sh/sh "kubectl" "apply" "-f" (str file))))
