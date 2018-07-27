@@ -194,4 +194,7 @@
   (when-not (and (.exists file)
                  (= (slurp file) content))
     (spit file content)
-    (sh/sh "kubectl" "apply" "-f" (str file))))
+    (let [res (sh/sh "kubectl" "apply" "-f" (str file))]
+      (when-not (= (:exit res) 0)
+        (.delete file)
+        (throw (Exception. (:err res)))))))

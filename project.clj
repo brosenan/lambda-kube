@@ -1,4 +1,4 @@
-(defproject lambdakube "0.1.0-SNAPSHOT"
+(defproject brosenan/lambdakube "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -8,5 +8,4 @@
                  [aysylu/loom "1.0.1"]]
   :profiles {:dev {:dependencies [[midje "1.9.2"]]
                    :plugins [[lein-midje "3.2.1"]
-                             [lein-auto "0.1.3"]]}}
-  :main "lambdakube.core")
+                             [lein-auto "0.1.3"]]}})

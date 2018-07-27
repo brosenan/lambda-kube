@@ -689,6 +689,22 @@ called.
    (slurp f) => "foo: baz"))
 
 ```
+If `kubectl` fails (returns a non-zero exit status), an exception
+is thrown with the content of the standard error, and the file is
+deleted, to make sure it is applied next time.
+```clojure
+(fact
+ (let [f (io/file "foo.yaml")]
+   (when (.exists f)
+     (.delete f))
+   (lkb/kube-apply "foo: bar" f) => (throws "there was a problem with foo")
+   (provided
+    (sh/sh "kubectl" "apply" "-f" "foo.yaml")
+    => {:exit 33
+        :err "there was a problem with foo"})
+   (.exists f) => false))
+
+```
 # Turning this to Usable YAML Files
 
 ```clojure
