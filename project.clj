@@ -1,4 +1,4 @@
-(defproject brosenan/lambdakube "0.1.1"
+(defproject brosenan/lambdakube "0.1.2-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -9,4 +9,4 @@
   :profiles {:dev {:dependencies [[midje "1.9.2"]]
                    :plugins [[lein-midje "3.2.1"]
                              [lein-auto "0.1.3"]]}}
-  :lein-release {:deploy-via :clojars})
+  :deploy-repositories [["releases" :clojars]])
