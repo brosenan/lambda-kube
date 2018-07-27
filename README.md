@@ -3,6 +3,59 @@ Lambda-kube is a Clojure library for building inputs for Kubernetes.
 [![Clojars Project](https://img.shields.io/clojars/v/brosenan/lambdakube.svg)](https://clojars.org/brosenan/lambdakube)
 [![Build Status](https://travis-ci.com/brosenan/lambda-kube.svg?branch=master)](https://travis-ci.com/brosenan/lambda-kube)
 
+# Usage
+Add lambdakube as a dependency to your `project.clj`, and
+(preferably), [lein-auto](https://github.com/weavejester/lein-auto) as
+a plugin.
+
+`:require` the namespace:
+```clojure
+(:require [lambdakube.core :as lk]
+          [clojure.java.io :as io])
+```
+
+Define a module function, defining the different parts of the system.
+```clojure
+(defn module [$]
+  (-> $
+      (lk/rule :frontend [:num-fe-replicas]
+               (fn [master slave num-replicas]
+                 (-> (lk/pod :nginx {:app :guesbook
+                                     :tier :frontend})
+                     (lk/add-container :nginx "nginx:1.7.9"
+                                       {:ports [{:containerPort 80}]})
+                     (lk/deployment num-replicas)
+                     (lk/expose {:ports [{:port 80}]
+                                 :type :NodePort}))))))
+```
+
+Define configuration.
+```clojure
+(def config
+  {:num-fe-replicas 3})
+```
+
+Define a `-main` function.
+```clojure
+(defn -main []
+  (-> (lk/injector config)
+      module
+      lk/get-deployable
+      lk/to-yaml
+      (lk/kube-apply (io/file "my-app.yaml"))))
+```
+
+Run it:
+```
+$ lein auto run
+```
+
+It will create a YAML file (`my-app.yaml`) and call `kubectl apply` on
+it. Then it will remain to watch your source files for changes, and
+when changed, will re-apply automatically.
+
+A complete example can be found [here](https://github.com/brosenan/lambdakube-example).
+
 # Documentation
 * [Core Library](core.md)
 
