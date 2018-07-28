@@ -16,9 +16,12 @@ a plugin.
 
 Define a module function, defining the different parts of the system.
 ```clojure
+;; A module function takes an injector ($) as parameter, and adds rules to it.
 (defn module [$]
   (-> $
+      ;; A rule defines a resource (:frontend) and dependencies ([:num-fe-replicas]).
       (lk/rule :frontend [:num-fe-replicas]
+	           ;; The function takes the dependencies as parameters and returns (an) API object(s)
                (fn [num-replicas]
                  (-> ;; Define a pod
                      (lk/pod :nginx {:app :guesbook
