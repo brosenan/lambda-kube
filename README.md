@@ -21,14 +21,14 @@ Define a module function, defining the different parts of the system.
       (lk/rule :frontend [:num-fe-replicas]
                (fn [num-replicas]
                  (-> ;; Define a pod
-				     (lk/pod :nginx {:app :guesbook
+                     (lk/pod :nginx {:app :guesbook
                                      :tier :frontend})
-	                 ;; Add a container to it
+                     ;; Add a container to it
                      (lk/add-container :nginx "nginx:1.7.9"
                                        {:ports [{:containerPort 80}]})
-	                 ;; Make a deployment out of it
+                     ;; Make a deployment out of it
                      (lk/deployment num-replicas)
-					 ;; Expose it as a service
+                     ;; Expose it as a service
                      (lk/expose {:ports [{:port 80}]
                                  :type :NodePort}))))))
 ```
