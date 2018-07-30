@@ -1,6 +1,6 @@
 (ns lambdakube.core-test
   (:require [midje.sweet :refer :all]
-            [lambdakube.core :as lkb]
+            [lambdakube.core :as lk]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]))
 
@@ -10,7 +10,7 @@
 
 ;; The `pod` function creates a pod with no containers.
 (fact
- (lkb/pod :foo {:app :bar})
+ (lk/pod :foo {:app :bar})
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -19,7 +19,7 @@
 
 ;; `pod` can take a third argument with additional spec parameters.
 (fact
- (lkb/pod :foo {:app :bar} {:foo :bar})
+ (lk/pod :foo {:app :bar} {:foo :bar})
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -30,9 +30,9 @@
 ;; pod as template. The deployment takes its name from the given pod,
 ;; and removes the name from the template.
 (fact
- (-> (lkb/pod :foo {:bar :baz})
-     (lkb/add-container :bar "some-image")
-     (lkb/deployment 3))
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/deployment 3))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -51,9 +51,9 @@
 ;; The `stateful-set` function wraps the given pod with a Kubernetes
 ;; stateful set.
 (fact
- (-> (lkb/pod :foo {:bar :baz})
-     (lkb/add-container :bar "some-image")
-     (lkb/stateful-set 5))
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/stateful-set 5))
  => {:apiVersion "apps/v1"
      :kind "StatefulSet"
      :metadata {:name :foo
@@ -82,8 +82,8 @@
 ;; function takes the container name and the image to be used as
 ;; explicit parameters, and an optional map with additional parameters.
 (fact
- (-> (lkb/pod :foo {})
-     (lkb/add-container :bar "bar-image" {:ports [{:containerPort 80}]}))
+ (-> (lk/pod :foo {})
+     (lk/add-container :bar "bar-image" {:ports [{:containerPort 80}]}))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -95,9 +95,9 @@
 ;; `add-env` augments the parameters of a _container_, and adds an
 ;; environment variable binding.
 (fact
- (-> (lkb/pod :foo {})
-     (lkb/add-container :bar "bar-image" (-> {:ports [{:containerPort 80}]}
-                                             (lkb/add-env {:FOO "BAR"}))))
+ (-> (lk/pod :foo {})
+     (lk/add-container :bar "bar-image" (-> {:ports [{:containerPort 80}]}
+                                             (lk/add-env {:FOO "BAR"}))))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -110,9 +110,9 @@
 
 ;; If an `:env` key already exists, new entries are added to the list.
 (fact
- (-> (lkb/pod :foo {})
-     (lkb/add-container :bar "bar-image" (-> {:env [{:name :QUUX :value "TAR"}]}
-                                             (lkb/add-env {:FOO "BAR"}))))
+ (-> (lk/pod :foo {})
+     (lk/add-container :bar "bar-image" (-> {:env [{:name :QUUX :value "TAR"}]}
+                                             (lk/add-env {:FOO "BAR"}))))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -126,8 +126,8 @@
 
 ;; `add-init-container` adds a new [init container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) to a pod.
 (fact
- (-> (lkb/pod :foo {})
-     (lkb/add-init-container :bar "my-image:tag"))
+ (-> (lk/pod :foo {})
+     (lk/add-init-container :bar "my-image:tag"))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -136,8 +136,8 @@
                               :image "my-image:tag"}]}}
 
  ;; And with additional params...
- (-> (lkb/pod :foo {})
-     (lkb/add-init-container :bar "my-image:tag" {:other :params}))
+ (-> (lk/pod :foo {})
+     (lk/add-init-container :bar "my-image:tag" {:other :params}))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -150,11 +150,11 @@
 ;; a volume claim template to its spec and mounts it to the given
 ;; paths within the given containers.
 (fact
- (-> (lkb/pod :foo {:bar :baz})
-     (lkb/add-container :bar "some-image")
-     (lkb/add-container :baz "some-other-image")
-     (lkb/stateful-set 5 {:additional-arg 123})
-     (lkb/add-volume-claim-template :vol-name
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/add-container :baz "some-other-image")
+     (lk/stateful-set 5 {:additional-arg 123})
+     (lk/add-volume-claim-template :vol-name
                                     ;; Spec
                                     {:accessModes ["ReadWriteOnce"]
                                      :storageClassName :my-storage-class
@@ -191,10 +191,10 @@
 ;; If the `:volumeMounts` entry already exists in the container, the
 ;; new mount is appended.
 (fact
- (-> (lkb/pod :foo {:bar :baz})
-     (lkb/add-container :bar "some-image" {:volumeMounts [{:foo :bar}]})
-     (lkb/stateful-set 5)
-     (lkb/add-volume-claim-template :vol-name
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image" {:volumeMounts [{:foo :bar}]})
+     (lk/stateful-set 5)
+     (lk/add-volume-claim-template :vol-name
                                     ;; Spec
                                     {:accessModes ["ReadWriteOnce"]
                                      :storageClassName :my-storage-class
@@ -245,10 +245,10 @@
 ;; it to the template. For example, we can use it to add a container
 ;; to a pod already within a deployment.
 (fact
- (-> (lkb/pod :foo {:bar :baz})
-     (lkb/deployment 3)
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/deployment 3)
      ;; The original pod has no containers. We add one now.
-     (lkb/update-template lkb/add-container :bar "some-image"))
+     (lk/update-template lk/add-container :bar "some-image"))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -269,12 +269,12 @@
 ;; container with the given name. It can be used in conjunction with
 ;; `update-template` to operate on a controller.
 (fact
- (-> (lkb/pod :foo {:bar :baz})
-     (lkb/add-container :bar "some-image")
-     (lkb/add-container :baz "some-other-image")
-     (lkb/deployment 3)
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/add-container :baz "some-other-image")
+     (lk/deployment 3)
      ;; We add an environment to a container.
-     (lkb/update-template lkb/update-container :bar lkb/add-env {:FOO "BAR"}))
+     (lk/update-template lk/update-container :bar lk/add-env {:FOO "BAR"}))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -304,10 +304,10 @@
 ;; The `expose` function is the most basic among them. The service it
 ;; provides takes its spec as argument.
 (fact
- (-> (lkb/pod :nginx-deployment {:app :nginx})
-     (lkb/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
-     (lkb/deployment 3)
-     (lkb/expose {:ports [{:protocol :TCP
+ (-> (lk/pod :nginx-deployment {:app :nginx})
+     (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+     (lk/deployment 3)
+     (lk/expose {:ports [{:protocol :TCP
                            :port 80
                            :targetPort 9376}]}))
  => [{:apiVersion "apps/v1"
@@ -335,11 +335,11 @@
 ;; controller's template. For ports with a `:name`, the name is also
 ;; copied over.
 (fact
- (-> (lkb/pod :nginx-deployment {:app :nginx})
-     (lkb/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80 :name :web}]})
-     (lkb/add-container :sidecar "my-sidecar" {:ports [{:containerPort 3333}]})
-     (lkb/deployment 3)
-     (lkb/expose-headless))
+ (-> (lk/pod :nginx-deployment {:app :nginx})
+     (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80 :name :web}]})
+     (lk/add-container :sidecar "my-sidecar" {:ports [{:containerPort 3333}]})
+     (lk/deployment 3)
+     (lk/expose-headless))
  => [{:apiVersion "apps/v1"
       :kind "Deployment"
       :metadata {:labels {:app :nginx}
@@ -404,10 +404,10 @@
 ;; new rules to it.
 (defn module1 [$]
   (-> $
-      (lkb/rule :my-deployment []
+      (lk/rule :my-deployment []
                 (fn []
-                  (-> (lkb/pod :my-pod {:app :my-app})
-                      (lkb/deployment 3))))))
+                  (-> (lk/pod :my-pod {:app :my-app})
+                      (lk/deployment 3))))))
 
 ;; This module uses the `rule` function to define a single _rule_. A
 ;; rule has a _name_, a vector of _dependencies_, and a function that
@@ -420,11 +420,11 @@
 ;; rules it defines. Then the function `get-deployable` to get all the
 ;; API objects in the system.
 (fact
- (-> (lkb/injector {})
+ (-> (lk/injector {})
      (module1)
-     (lkb/get-deployable))
- => [(-> (lkb/pod :my-pod {:app :my-app})
-         (lkb/deployment 3))])
+     (lk/get-deployable))
+ => [(-> (lk/pod :my-pod {:app :my-app})
+         (lk/deployment 3))])
 
 ;; Rules may depend on configuration parameters. These parameters need
 ;; to be listed as dependencies, and then, if they exist in the
@@ -436,58 +436,58 @@
 ;; `:does-not-exist`.
 (defn module2 [$]
   (-> $
-      (lkb/rule :not-going-to-work [:does-not-exist]
+      (lk/rule :not-going-to-work [:does-not-exist]
                 (fn [does-not-exist]
-                  (lkb/pod :no-pod {:app :no-app})))
-      (lkb/rule :my-deployment [:my-deployment-num-replicas]
+                  (lk/pod :no-pod {:app :no-app})))
+      (lk/rule :my-deployment [:my-deployment-num-replicas]
                 (fn [num-replicas]
-                  (-> (lkb/pod :my-pod {:app :my-app})
-                      (lkb/deployment num-replicas))))))
+                  (-> (lk/pod :my-pod {:app :my-app})
+                      (lk/deployment num-replicas))))))
 
 ;; Now, if we provide a configuration that only contains
 ;; `:my-deployment-num-replicas`, but not `:not-going-to-work`,
 ;; `:my-deployment` will be created, but not `:not-going-to-work`.
 (fact
- (-> (lkb/injector {:my-deployment-num-replicas 5})
+ (-> (lk/injector {:my-deployment-num-replicas 5})
      (module2)
-     (lkb/get-deployable))
- => [(-> (lkb/pod :my-pod {:app :my-app})
-         (lkb/deployment 5))])
+     (lk/get-deployable))
+ => [(-> (lk/pod :my-pod {:app :my-app})
+         (lk/deployment 5))])
 
 ;; If the rule emits a list (e.g., in the case of a service attached
 ;; to a deployment), the list is flattened.
 (defn module3 [$]
   (-> $
-      (lkb/rule :my-service [:my-deployment-num-replicas]
+      (lk/rule :my-service [:my-deployment-num-replicas]
                 (fn [num-replicas]
-                  (-> (lkb/pod :my-service {:app :my-app})
-                      (lkb/deployment num-replicas)
-                      (lkb/expose {}))))))
+                  (-> (lk/pod :my-service {:app :my-app})
+                      (lk/deployment num-replicas)
+                      (lk/expose {}))))))
 
 (fact
- (-> (lkb/injector {:my-deployment-num-replicas 5})
+ (-> (lk/injector {:my-deployment-num-replicas 5})
      (module3)
-     (lkb/get-deployable))
- => (-> (lkb/pod :my-service {:app :my-app})
-        (lkb/deployment 5)
-        (lkb/expose {})))
+     (lk/get-deployable))
+ => (-> (lk/pod :my-service {:app :my-app})
+        (lk/deployment 5)
+        (lk/expose {})))
 
 ;; Resources may depend on one another. The following module depends
 ;; on `:my-service`.
 (defn module4 [$]
   (-> $
-      (lkb/rule :my-pod [:my-service]
+      (lk/rule :my-pod [:my-service]
                 (fn [my-service]
-                  (lkb/pod :my-pod {:app :my-app})))))
+                  (lk/pod :my-pod {:app :my-app})))))
 (fact
- (-> (lkb/injector {:my-deployment-num-replicas 5})
+ (-> (lk/injector {:my-deployment-num-replicas 5})
      (module4)
      (module3)
-     (lkb/get-deployable))
- => (concat [(lkb/pod :my-pod {:app :my-app})]
-            (-> (lkb/pod :my-service {:app :my-app})
-                (lkb/deployment 5)
-                (lkb/expose {}))))
+     (lk/get-deployable))
+ => (concat [(lk/pod :my-pod {:app :my-app})]
+            (-> (lk/pod :my-service {:app :my-app})
+                (lk/deployment 5)
+                (lk/expose {}))))
 
 ;; ## Describers and Descriptions
 
@@ -522,19 +522,19 @@
 ;; the labels.
 (defn module5 [$]
   (-> $
-      (lkb/desc (fn [obj]
+      (lk/desc (fn [obj]
                   {:name (-> obj :metadata :name)}))
-      (lkb/desc (fn [obj]
+      (lk/desc (fn [obj]
                   (when (= (:kind "Service"))
                     {:port (-> obj :spec :ports first :port)})))
-      (lkb/desc (fn [obj]
+      (lk/desc (fn [obj]
                   {:labels (-> obj :metadata :labels)}))
-      (lkb/rule :first-pod []
+      (lk/rule :first-pod []
                 (fn []
-                  (lkb/pod :my-first-pod {})))
-      (lkb/rule :second-pod [:first-pod]
+                  (lk/pod :my-first-pod {})))
+      (lk/rule :second-pod [:first-pod]
                 (fn [first-pod]
-                  (lkb/pod :my-first-pod {:the-name (:name first-pod)
+                  (lk/pod :my-first-pod {:the-name (:name first-pod)
                                           :the-port (:port first-pod)
                                           :the-labels (:labels first-pod)})))))
 
@@ -544,11 +544,11 @@
 ;; `get-deployable`, we will get both pods. The labels in the second
 ;; pod will be set so that the name will be there, but not the port.
 (fact
- (-> (lkb/injector {})
+ (-> (lk/injector {})
      (module5)
-     (lkb/get-deployable))
- => [(lkb/pod :my-first-pod {})
-     (lkb/pod :my-first-pod {:the-name :my-first-pod
+     (lk/get-deployable))
+ => [(lk/pod :my-first-pod {})
+     (lk/pod :my-first-pod {:the-name :my-first-pod
                              :the-port nil
                              :the-labels {}})])
 
@@ -563,11 +563,11 @@
 ;; `to-yaml` takes a vector of API objects and returns a YAML string
 ;; acceptable by Kubernetes.
 (fact
- (-> (lkb/pod :nginx-deployment {:app :nginx})
-     (lkb/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
-     (lkb/deployment 3)
-     (lkb/expose-headless)
-     (lkb/to-yaml)) =>
+ (-> (lk/pod :nginx-deployment {:app :nginx})
+     (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+     (lk/deployment 3)
+     (lk/expose-headless)
+     (lk/to-yaml)) =>
 "apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -609,7 +609,7 @@ spec:
  (let [f (io/file "foo.yaml")]
    (when (.exists f)
      (.delete f))
-   (lkb/kube-apply "foo: bar" f) => irrelevant
+   (lk/kube-apply "foo: bar" f) => irrelevant
    (provided
     (sh/sh "kubectl" "apply" "-f" "foo.yaml") => {:exit 0})
    (.exists f) => true
@@ -619,7 +619,7 @@ spec:
 ;; given string, nothing happens.
 (fact
  (let [f (io/file "foo.yaml")]
-   (lkb/kube-apply "foo: bar" f) => irrelevant
+   (lk/kube-apply "foo: bar" f) => irrelevant
    (provided
     ;; Not called
     (sh/sh "kubectl" "apply" "-f" "foo.yaml") => {:exit 0} :times 0)))
@@ -629,7 +629,7 @@ spec:
 ;; called.
 (fact
  (let [f (io/file "foo.yaml")]
-   (lkb/kube-apply "foo: baz" f) => irrelevant
+   (lk/kube-apply "foo: baz" f) => irrelevant
    (provided
     (sh/sh "kubectl" "apply" "-f" "foo.yaml") => {:exit 0})
    (.exists f) => true
@@ -642,7 +642,7 @@ spec:
  (let [f (io/file "foo.yaml")]
    (when (.exists f)
      (.delete f))
-   (lkb/kube-apply "foo: bar" f) => (throws "there was a problem with foo")
+   (lk/kube-apply "foo: bar" f) => (throws "there was a problem with foo")
    (provided
     (sh/sh "kubectl" "apply" "-f" "foo.yaml")
     => {:exit 33
@@ -651,19 +651,19 @@ spec:
 
 ;; # Turning this to Usable YAML Files
 
-'(println (-> (lkb/pod :nginx-deployment {:app :nginx})
-             (lkb/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
-             (lkb/deployment 3)
-             (lkb/expose-headless)
-             (lkb/to-yaml)))
+'(println (-> (lk/pod :nginx-deployment {:app :nginx})
+             (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+             (lk/deployment 3)
+             (lk/expose-headless)
+             (lk/to-yaml)))
 
-'(println (-> (lkb/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
-             (lkb/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
+'(println (-> (lk/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
+             (lk/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
                                                                              :name "web"}]})
-             (lkb/stateful-set 3)
-             (lkb/add-volume-claim-template :www
+             (lk/stateful-set 3)
+             (lk/add-volume-claim-template :www
                                             {:accessModes ["ReadWriteOnce"]
                                              :resources {:requests {:storage "1Gi"}}}
                                             {:nginx "/usr/share/nginx/html"})
-             (lkb/expose-headless)
-             (lkb/to-yaml)))
+             (lk/expose-headless)
+             (lk/to-yaml)))
