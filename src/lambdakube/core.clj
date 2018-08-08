@@ -143,16 +143,15 @@
     (conj list obj)))
 
 (defn- sorted-rules [rules]
-  (let [rulemap (into {} (for [[func deps res] rules]
-                           [res [func deps res]]))
+  (let [rulemap (into {} (map-indexed vector rules))
         g (apply digraph (concat
-                          ;; Vertices
-                          (for [[func deps res] rules]
-                            res)
-                          ;; Edges
-                          (for [[func deps res] rules
-                                d deps]
-                            [d res])))]
+                          ;; Inputs
+                          (for [[index [func deps res]] rulemap
+                                dep deps]
+                            [dep index])
+                          ;; Outputs
+                          (for [[index [func deps res]] rulemap]
+                            [index res])))]
     (map rulemap (topsort g))))
 
 (defn- describe [api-obj descs]

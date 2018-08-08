@@ -490,6 +490,26 @@
                 (lk/deployment 5)
                 (lk/expose {}))))
 
+;; Rules can compete with each other. For example, two rules can
+;; define the resource `:foo`, and give it two different
+;; meanings.
+(defn module5 [$]
+  (-> $
+      (lk/rule :foo [:use-bar]
+               (fn [use-bar]
+                 (lk/pod :bar {})))
+      (lk/rule :foo [:use-baz]
+               (fn [use-baz]
+                 (lk/pod :baz {})))))
+
+;; Assuming the requierements for only one of these rules is met, this
+;; rule will take effect.
+(fact
+ (-> (lk/injector)
+     (module5)
+     (lk/get-deployable {:use-bar 1}))
+ => [(lk/pod :bar {})])
+
 ;; ## Describers and Descriptions
 
 ;; When one resource depends on another, it often needs information
@@ -521,7 +541,7 @@
 ;; first extracts the name out of any object. The second returns the
 ;; port number for a service (or `nil` if not), and the third extracts
 ;; the labels.
-(defn module5 [$]
+(defn module6 [$]
   (-> $
       (lk/desc (fn [obj]
                   {:name (-> obj :metadata :name)}))
@@ -546,7 +566,7 @@
 ;; pod will be set so that the name will be there, but not the port.
 (fact
  (-> (lk/injector)
-     (module5)
+     (module6)
      (lk/get-deployable {}))
  => [(lk/pod :my-first-pod {})
      (lk/pod :my-first-pod {:the-name :my-first-pod
