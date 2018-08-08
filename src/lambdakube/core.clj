@@ -173,9 +173,12 @@
             ;; else
             (let [[func deps res] rule
                   [out config] (if (every? (partial contains? config) deps)
-                                 (let [api-obj (apply func (map config deps))
-                                       desc (describe api-obj descs)]
-                                   [(append out api-obj) (assoc config res desc)])
+                                 (if (contains? config res)
+                                   (throw (Exception. (str "Conflicting prerequisites for resource " res)))
+                                   ;; else
+                                   (let [api-obj (apply func (map config deps))
+                                         desc (describe api-obj descs)]
+                                     [(append out api-obj) (assoc config res desc)]))
                                  ;; else
                                  [out config])]
               (recur (rest rules) config out))))))))

@@ -507,8 +507,17 @@
 (fact
  (-> (lk/injector)
      (module5)
-     (lk/get-deployable {:use-bar 1}))
+     (lk/get-deployable {:use-bar true}))
  => [(lk/pod :bar {})])
+
+;; If two or more competing rules can be applied, an exception is
+;; thrown.
+(fact
+ (-> (lk/injector)
+     (module5)
+     (lk/get-deployable {:use-bar true
+                         :use-baz true}))
+ => (throws "Conflicting prerequisites for resource :foo"))
 
 ;; ## Describers and Descriptions
 
