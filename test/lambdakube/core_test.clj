@@ -415,14 +415,14 @@
 ;; case, the name is `:my-deployment`, there are no dependencies, and
 ;; the API object is a deployment of three pods.
 
-;; The `injector` function creates an injector based on the given
-;; configuration. This injector can be passed to the module to add the
-;; rules it defines. Then the function `get-deployable` to get all the
-;; API objects in the system.
+;; The `injector` function creates a fresh injector. This injector can
+;; be passed to the module to add the rules it defines. Then the
+;; function `get-deployable` to get all the API objects in the system,
+;; according to the given configuration.
 (fact
- (-> (lk/injector {})
+ (-> (lk/injector)
      (module1)
-     (lk/get-deployable))
+     (lk/get-deployable {}))
  => [(-> (lk/pod :my-pod {:app :my-app})
          (lk/deployment 3))])
 
@@ -448,9 +448,9 @@
 ;; `:my-deployment-num-replicas`, but not `:not-going-to-work`,
 ;; `:my-deployment` will be created, but not `:not-going-to-work`.
 (fact
- (-> (lk/injector {:my-deployment-num-replicas 5})
+ (-> (lk/injector)
      (module2)
-     (lk/get-deployable))
+     (lk/get-deployable {:my-deployment-num-replicas 5}))
  => [(-> (lk/pod :my-pod {:app :my-app})
          (lk/deployment 5))])
 
@@ -465,9 +465,9 @@
                       (lk/expose {}))))))
 
 (fact
- (-> (lk/injector {:my-deployment-num-replicas 5})
+ (-> (lk/injector)
      (module3)
-     (lk/get-deployable))
+     (lk/get-deployable {:my-deployment-num-replicas 5}))
  => (-> (lk/pod :my-service {:app :my-app})
         (lk/deployment 5)
         (lk/expose {})))
@@ -479,11 +479,12 @@
       (lk/rule :my-pod [:my-service]
                 (fn [my-service]
                   (lk/pod :my-pod {:app :my-app})))))
+
 (fact
- (-> (lk/injector {:my-deployment-num-replicas 5})
+ (-> (lk/injector)
      (module4)
      (module3)
-     (lk/get-deployable))
+     (lk/get-deployable {:my-deployment-num-replicas 5}))
  => (concat [(lk/pod :my-pod {:app :my-app})]
             (-> (lk/pod :my-service {:app :my-app})
                 (lk/deployment 5)
@@ -544,9 +545,9 @@
 ;; `get-deployable`, we will get both pods. The labels in the second
 ;; pod will be set so that the name will be there, but not the port.
 (fact
- (-> (lk/injector {})
+ (-> (lk/injector)
      (module5)
-     (lk/get-deployable))
+     (lk/get-deployable {}))
  => [(lk/pod :my-first-pod {})
      (lk/pod :my-first-pod {:the-name :my-first-pod
                              :the-port nil

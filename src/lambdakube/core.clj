@@ -127,9 +127,8 @@
                            {:port (-> port :containerPort)}))
                 :clusterIP :None}))
 
-(defn injector [config]
-  {:config config
-   :rules []
+(defn injector []
+  {:rules []
    :descs []})
 
 (defn rule [$ res deps func]
@@ -161,7 +160,7 @@
        (map (fn [f] (f api-obj)))
        (reduce merge {})))
 
-(defn get-deployable [{:keys [config rules descs]}]
+(defn get-deployable [{:keys [rules descs]} config]
   (let [rules (sorted-rules rules)]
     (loop [rules rules
            config config
