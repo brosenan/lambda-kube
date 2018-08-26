@@ -322,78 +322,59 @@ container with the given name. It can be used in conjunction with
 ```
 # Exposure Functions
 
-There are several ways to expose a service under Kubernetes. The
-`expose*` family of functions wraps an existing deployment with a
-list, containing the deployment itself (unchanged) and a service,
-which exposes it.
+In Kubernetes, to make a network interface in one pod available
+outside that pod, two things need to be defined. First, the
+necessary ports need to be exported from the relevant
+container(s). Second, a service must be defined, forwarding these
+ports to either a virtual IP address (in the case of a `:ClusterIP`
+service, or a port of the hosting node, as in the case of a
+`:NodePort` service.
 
-The `expose` function is the most basic among them. The service it
-provides takes its spec as argument.
+Lambda-Kube takes a two-step approach to allow the exposure of
+network interfaces. The first step involves the `port`
+function. This function takes a name of a container, a port number
+on that container and (optionally) a port number to be exported,
+and returns a function that transforms both a pod and a service.
 ```clojure
 (fact
- (-> (lk/pod :nginx-deployment {:app :nginx})
-     (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
-     (lk/deployment 3)
-     (lk/expose {:ports [{:protocol :TCP
-                           :port 80
-                           :targetPort 9376}]}))
- => [{:apiVersion "apps/v1"
-      :kind "Deployment"
-      :metadata {:labels {:app :nginx} :name :nginx-deployment}
-      :spec {:replicas 3
-             :selector {:matchLabels {:app :nginx}}
-             :template {:metadata {:labels {:app :nginx}}
-                        :spec {:containers [{:image "nginx:1.7.9"
-                                             :name :nginx
-                                             :ports [{:containerPort 80}]}]}}}}
-     {:kind "Service"
-      :apiVersion "v1"
-      :metadata {:name :nginx-deployment}
-      :spec
-      {:selector {:app :nginx}
-       :ports [{:protocol :TCP
-                :port 80
-                :targetPort 9376}]}}])
-
+ (let [p (lk/port :my-cont 80 8080)
+       ;; Based on the kind of service, we provide a function that
+       ;; updates the service with the new ports.
+       edit-svc (fn [svc src tgt]
+                  (update svc :spec lk/field-conj :ports
+                          {:port src :targetPort tgt}))
+       pod (-> (lk/pod :my-pod {})
+               (lk/add-container :my-cont "some-image"))
+       svc {:metadata {:name :foo}
+            :spec {}}
+       [pod svc] (p [pod svc edit-svc])]
+   pod => (-> (lk/pod :my-pod {})
+              (lk/add-container :my-cont "some-image" {:ports [{:containerPort 80}]}))
+   svc => {:metadata {:name :foo}
+           :spec {:ports [{:port 80
+                           :targetPort 8080}]}}))
 
 ```
-The `expose-headless` wraps the given controller (deployment,
-statefulset) with a headless service. The service exposes all the
-ports listed as `:containerPort`s in all the containers in the
-controller's template. For ports with a `:name`, the name is also
-copied over.
+`port` is composable through composition (`comp`).
 ```clojure
-(fact
- (-> (lk/pod :nginx-deployment {:app :nginx})
-     (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80 :name :web}]})
-     (lk/add-container :sidecar "my-sidecar" {:ports [{:containerPort 3333}]})
-     (lk/deployment 3)
-     (lk/expose-headless))
- => [{:apiVersion "apps/v1"
-      :kind "Deployment"
-      :metadata {:labels {:app :nginx}
-                 :name :nginx-deployment}
-      :spec {:replicas 3
-             :selector {:matchLabels {:app :nginx}}
-             :template
-             {:metadata {:labels {:app :nginx}}
-              :spec {:containers
-                     [{:image "nginx:1.7.9"
-                       :name :nginx
-                       :ports [{:containerPort 80
-                                :name :web}]}
-                      {:image "my-sidecar"
-                       :name :sidecar
-                       :ports [{:containerPort 3333}]}]}}}}
-     {:kind "Service"
-      :apiVersion "v1"
-      :metadata {:name :nginx-deployment}
-      :spec
-      {:selector {:app :nginx}
-       :clusterIP :None
-       :ports [{:port 80 :name :web}
-               {:port 3333}]}}])
-
+(let [p (comp (lk/port :my-cont 80 8080)
+              (lk/port :my-cont 443 443))
+       edit-svc (fn [svc src tgt]
+                  (update svc :spec lk/field-conj :ports
+                          {:port src :targetPort tgt}))
+       pod (-> (lk/pod :my-pod {})
+               (lk/add-container :my-cont "some-image"))
+       svc {:metadata {:name :foo}
+            :spec {}}
+       [pod svc] (p [pod svc edit-svc])]
+   pod => (-> (lk/pod :my-pod {})
+              (lk/add-container :my-cont "some-image" {:ports [{:containerPort 80}
+                                                               {:containerPort 443}]}))
+   svc => {:metadata {:name :foo}
+           :spec {:ports [{:port 80
+                           :targetPort 8080}
+                          {:port 443
+                           :targetPort 443}]}})
 
 ```
 # Dependency Injection
@@ -492,29 +473,16 @@ Now, if we provide a configuration that only contains
          (lk/deployment 5))])
 
 ```
-If the rule emits a list (e.g., in the case of a service attached
-to a deployment), the list is flattened.
+Resources may depend on one another. The following module depends
+on `:my-service`.
 ```clojure
 (defn module3 [$]
   (-> $
       (lk/rule :my-service [:my-deployment-num-replicas]
                 (fn [num-replicas]
                   (-> (lk/pod :my-service {:app :my-app})
-                      (lk/deployment num-replicas)
-                      (lk/expose {}))))))
+                      (lk/deployment num-replicas))))))
 
-(fact
- (-> (lk/injector)
-     (module3)
-     (lk/get-deployable {:my-deployment-num-replicas 5}))
- => (-> (lk/pod :my-service {:app :my-app})
-        (lk/deployment 5)
-        (lk/expose {})))
-
-```
-Resources may depend on one another. The following module depends
-on `:my-service`.
-```clojure
 (defn module4 [$]
   (-> $
       (lk/rule :my-pod [:my-service]
@@ -526,10 +494,9 @@ on `:my-service`.
      (module4)
      (module3)
      (lk/get-deployable {:my-deployment-num-replicas 5}))
- => (concat [(lk/pod :my-pod {:app :my-app})]
-            (-> (lk/pod :my-service {:app :my-app})
-                (lk/deployment 5)
-                (lk/expose {}))))
+ => (concat [(-> (lk/pod :my-service {:app :my-app})
+                 (lk/deployment 5))]
+            [(lk/pod :my-pod {:app :my-app})]))
 
 ```
 Rules can compete with each other. For example, two rules can
@@ -649,7 +616,7 @@ acceptable by Kubernetes.
  (-> (lk/pod :nginx-deployment {:app :nginx})
      (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
      (lk/deployment 3)
-     (lk/expose-headless)
+     (list)
      (lk/to-yaml)) =>
 "apiVersion: apps/v1
 kind: Deployment
@@ -672,17 +639,6 @@ spec:
         - containerPort: 80
         name: nginx
         image: nginx:1.7.9
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx-deployment
-spec:
-  ports:
-  - port: 80
-  clusterIP: None
-  selector:
-    app: nginx
 ")
 
 ```
@@ -760,5 +716,69 @@ deleted, to make sure it is applied next time.
                                             {:nginx "/usr/share/nginx/html"})
              (lk/expose-headless)
              (lk/to-yaml)))
+
+
+```
+# Under the Hood
+
+## Flattening Nested API Objects
+
+API objects constructed in lambda-kube can have a `:$additional`
+field anywhere in their structure, containing a vector of
+additional API objects. The `extract-additional` function takes an
+API object (as a Clojure map), and returns the same object with all
+nested `:$additional` fields removed, and a meta-field --
+`:additional`, containin a list of all nested objects.
+
+For a map that does not contain `:$additional`, the map is returned
+as-is, and the `:additional` meta-field is empty.
+```clojure
+(fact
+ (let [ext (lk/extract-additional {:foo :bar})]
+   ext => {:foo :bar}
+   (-> ext meta :additional) => empty?))
+
+```
+For a map containing `:$additional`, the underlying objects are
+placed in the `:additional` meta-field, and the field itself is
+removed from the map.
+```clojure
+(fact
+ (let [ext (lk/extract-additional {:foo :bar
+                                   :$additional [{:x 1}
+                                                 {:y 2}]})]
+   ext => {:foo :bar}
+   (-> ext meta :additional) => [{:x 1}
+                                 {:y 2}]))
+
+```
+If the nested maps contain `:$additional`, their respective content
+is also added to the `:additional` meta-field.
+```clojure
+(fact
+ (let [ext (lk/extract-additional {:foo :bar
+                                   :$additional [{:x 1
+                                                  :$additional [{:z 3}]}
+                                                 {:y 2}]})]
+   ext => {:foo :bar}
+   (set (-> ext meta :additional)) => #{{:x 1}
+                                        {:y 2}
+                                        {:z 3}}))
+
+```
+`:$additional` fields can appear anywhere in the structure.
+```clojure
+(fact
+ (let [ext (lk/extract-additional {:foo :bar
+                                   :baz {:x 1
+                                         :$additional [{:z 3}]}
+                                   :quux [{:p 1
+                                           :$additional [{:y 2}]}]})]
+   ext => {:foo :bar
+           :baz {:x 1}
+           :quux [{:p 1}]}
+   (set (-> ext meta :additional)) => #{{:z 3}
+                                        {:y 2}}))
+
 ```
 

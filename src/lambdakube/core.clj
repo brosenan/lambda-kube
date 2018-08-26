@@ -5,7 +5,7 @@
             [yaml.core :as yaml]
             [clojure.java.shell :as sh]))
 
-(defn- field-conj [m k v]
+(defn field-conj [m k v]
   (if (contains? m k)
     (update m k conj v)
     ;; else
@@ -69,12 +69,8 @@
   (let [envs (for [[name val] envs]
                            {:name name
                             :value val})]
-    (if (contains? container :env)
-      (-> container
-          (update :env concat envs))
-      ;; else
-      (-> container
-          (assoc :env (vec envs))))))
+    (-> container
+        (update :env concat envs))))
 
 (defn add-init-container
   ([pod name image options]
@@ -213,3 +209,12 @@
                             additional (mapcat #(-> % meta :additional) obj)]
                         (with-meta obj {:additional additional}))
     :else obj))
+
+(defn port [cont src-port tgt-port]
+  (fn [[pod svc edit-svc]]
+    [(-> pod
+         (update-container cont field-conj :ports {:containerPort src-port}))
+     (-> svc
+         (edit-svc src-port tgt-port))
+     edit-svc]))
+
