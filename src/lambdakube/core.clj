@@ -105,23 +105,23 @@
                         cont))]
     (update-in pod [:spec :containers] #(map update-cont %))))
 
-(defn expose [depl options]
-  [depl
-   {:apiVersion "v1"
-    :kind "Service"
-    :metadata {:name (-> depl :metadata :name)}
-    :spec (-> options
-              (merge {:selector (-> depl :metadata :labels)}))}])
+(defn expose [depl name portfunc attrs editfunc]
+  (let [pod (-> depl :spec :template)
+        srv {:kind "Service"
+             :apiVersion "v1"
+             :metadata {:name name}
+             :spec (-> attrs
+                       (merge {:selector (-> pod :metadata :labels)}))}
+        [pod srv] (portfunc [pod srv editfunc])]
+    (-> depl
+        (assoc :$additional srv)
+        (update :spec assoc :template pod))))
 
-(defn expose-headless [ctrl]
-  (expose ctrl {:ports (for [cont (-> ctrl :spec :template :spec :containers)
-                             port (-> cont :ports)]
-                         (if (contains? port :name)
-                           {:port (-> port :containerPort)
-                            :name (-> port :name)}
-                           ;; else
-                           {:port (-> port :containerPort)}))
-                :clusterIP :None}))
+(defn expose-cluster-ip [depl name portfunc]
+  (expose depl name portfunc {:type :ClusterIP}
+          (fn [svc src tgt]
+            (update svc :spec field-conj :ports {:port src
+                                                 :targetPort tgt}))))
 
 (defn injector []
   {:rules []

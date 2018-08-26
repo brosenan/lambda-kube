@@ -347,6 +347,77 @@
                           {:port 443
                            :targetPort 443}]}})
 
+;; The second step involves a family of `expose*` functions, which
+;; create different kinds of services.
+
+;; The basic `expose` function takes a deployment-like API object
+;; (deployment, stateful-set, job), a name, a function like the one
+;; returned from `port`, a map with additional properties and a
+;; function for editing the service, adding a port mapping.
+
+;; It returns the deployment-like object augmented such that:
+;; 1. A new service object is added in an `:$additional` field.
+;; 2. The `:template` is augmented according to the `port` function(s).
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :quux "some-image")
+     (lk/deployment 3)
+     (lk/expose :foo-srv
+                (lk/port :quux 80 30080)
+                {:type :NodePort}
+                (fn [svc src tgt]
+                  (update svc :spec lk/field-conj :ports
+                          {:port src :nodePort tgt}))))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector {:matchLabels {:bar :baz}}
+            :template {:metadata {:labels {:bar :baz}}
+                       :spec {:containers [{:name :quux
+                                            :image "some-image"
+                                            :ports [{:containerPort 80}]}]}}}
+     :$additional {:apiVersion "v1"
+                   :kind "Service"
+                   :metadata {:name :foo-srv}
+                   :spec {:type :NodePort
+                          :selector {:bar :baz}
+                          :ports [{:port 80
+                                   :nodePort 30080}]}}})
+
+;; The `expose` function is not intended to be used directly. Instead,
+;; `expose-*` functions cover the different service types.
+
+;; ## ClusterIP Services
+
+;; To create ClusterIP services, use the `expose-cluster-ip`
+;; function. It takes a deployment, a name, and a port function, and
+;; returns a ClusterIP service.
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :quux "some-image")
+     (lk/deployment 3)
+     (lk/expose-cluster-ip :foo-srv
+                (lk/port :quux 80 8080)))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector {:matchLabels {:bar :baz}}
+            :template {:metadata {:labels {:bar :baz}}
+                       :spec {:containers [{:name :quux
+                                            :image "some-image"
+                                            :ports [{:containerPort 80}]}]}}}
+     :$additional {:apiVersion "v1"
+                   :kind "Service"
+                   :metadata {:name :foo-srv}
+                   :spec {:type :ClusterIP
+                          :selector {:bar :baz}
+                          :ports [{:port 80
+                                   :targetPort 8080}]}}})
+
 ;; # Dependency Injection
 
 ;; Functions such as `pod` and `deployment` help build Kubernetes API
