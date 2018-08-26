@@ -697,3 +697,58 @@ spec:
                                             {:nginx "/usr/share/nginx/html"})
              (lk/expose-headless)
              (lk/to-yaml)))
+
+
+;; # Under the Hood
+
+;; ## Flattening Nested API Objects
+
+;; API objects constructed in lambda-kube can have a `:$additional`
+;; field anywhere in their structure, containing a vector of
+;; additional API objects. The `extract-additional` function takes an
+;; API object (as a Clojure map), and returns the same object with all
+;; nested `:$additional` fields removed, and a meta-field --
+;; `:additional`, containin a list of all nested objects.
+
+;; For a map that does not contain `:$additional`, the map is returned
+;; as-is, and the `:additional` meta-field is empty.
+(fact
+ (let [ext (lk/extract-additional {:foo :bar})]
+   ext => {:foo :bar}
+   (-> ext meta :additional) => empty?))
+
+;; For a map containing `:$additional`, the underlying objects are
+;; placed in the `:additional` meta-field, and the field itself is
+;; removed from the map.
+(fact
+ (let [ext (lk/extract-additional {:foo :bar
+                                   :$additional [{:x 1}
+                                                 {:y 2}]})]
+   ext => {:foo :bar}
+   (-> ext meta :additional) => [{:x 1}
+                                 {:y 2}]))
+
+;; If the nested maps contain `:$additional`, their respective content
+;; is also added to the `:additional` meta-field.
+(fact
+ (let [ext (lk/extract-additional {:foo :bar
+                                   :$additional [{:x 1
+                                                  :$additional [{:z 3}]}
+                                                 {:y 2}]})]
+   ext => {:foo :bar}
+   (set (-> ext meta :additional)) => #{{:x 1}
+                                        {:y 2}
+                                        {:z 3}}))
+
+;; `:$additional` fields can appear anywhere in the structure.
+(fact
+ (let [ext (lk/extract-additional {:foo :bar
+                                   :baz {:x 1
+                                         :$additional [{:z 3}]}
+                                   :quux [{:p 1
+                                           :$additional [{:y 2}]}]})]
+   ext => {:foo :bar
+           :baz {:x 1}
+           :quux [{:p 1}]}
+   (set (-> ext meta :additional)) => #{{:z 3}
+                                        {:y 2}}))

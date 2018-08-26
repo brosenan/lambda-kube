@@ -199,3 +199,17 @@
       (when-not (= (:exit res) 0)
         (.delete file)
         (throw (Exception. (:err res)))))))
+
+(defn extract-additional [obj]
+  (cond
+    (map? obj) (let [obj (into {} (for [[k v] obj]
+                                    [k (extract-additional v)]))
+                     additions-from-fields (mapcat (fn [[k v]] (-> v meta :additional)) obj)
+                     explicit-additions (:$additional obj)
+                     additional (concat explicit-additions (mapcat #(-> % meta :additional) explicit-additions) additions-from-fields)]
+                 (with-meta (dissoc obj :$additional)
+                   {:additional additional}))
+    (sequential? obj) (let [obj (map extract-additional obj)
+                            additional (mapcat #(-> % meta :additional) obj)]
+                        (with-meta obj {:additional additional}))
+    :else obj))
