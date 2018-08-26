@@ -11,6 +11,22 @@
     ;; else
     (assoc m k [v])))
 
+(defn extract-additional [obj]
+  (cond
+    (map? obj) (let [obj (into {} (for [[k v] obj]
+                                    [k (extract-additional v)]))
+                     additions-from-fields (mapcat (fn [[k v]] (-> v meta :additional)) obj)
+                     explicit-additions (:$additional obj)
+                     additional (concat explicit-additions
+                                        (mapcat #(-> % meta :additional) explicit-additions)
+                                        additions-from-fields)]
+                 (with-meta (dissoc obj :$additional)
+                   {:additional additional}))
+    (sequential? obj) (let [obj (map extract-additional obj)
+                            additional (mapcat #(-> % meta :additional) obj)]
+                        (with-meta obj {:additional additional}))
+    :else obj))
+
 (defn pod
   ([name labels options]
    {:apiVersion "v1"
@@ -192,8 +208,10 @@
                                    (throw (Exception. (str "Conflicting prerequisites for resource " res)))
                                    ;; else
                                    (let [api-obj (apply func (map config deps))
-                                         desc (describe api-obj descs)]
-                                     [(append out api-obj) (assoc config res desc)]))
+                                         desc (describe api-obj descs)
+                                         extracted (extract-additional api-obj)]
+                                     [(concat out [extracted] (-> extracted meta :additional))
+                                      (assoc config res desc)]))
                                  ;; else
                                  [out config])]
               (recur (rest rules) config out))))))))
@@ -214,20 +232,6 @@
       (when-not (= (:exit res) 0)
         (.delete file)
         (throw (Exception. (:err res)))))))
-
-(defn extract-additional [obj]
-  (cond
-    (map? obj) (let [obj (into {} (for [[k v] obj]
-                                    [k (extract-additional v)]))
-                     additions-from-fields (mapcat (fn [[k v]] (-> v meta :additional)) obj)
-                     explicit-additions (:$additional obj)
-                     additional (concat explicit-additions (mapcat #(-> % meta :additional) explicit-additions) additions-from-fields)]
-                 (with-meta (dissoc obj :$additional)
-                   {:additional additional}))
-    (sequential? obj) (let [obj (map extract-additional obj)
-                            additional (mapcat #(-> % meta :additional) obj)]
-                        (with-meta obj {:additional additional}))
-    :else obj))
 
 (defn port
   ([cont src-port]

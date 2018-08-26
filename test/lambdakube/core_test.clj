@@ -97,7 +97,7 @@
 (fact
  (-> (lk/pod :foo {})
      (lk/add-container :bar "bar-image" (-> {:ports [{:containerPort 80}]}
-                                             (lk/add-env {:FOO "BAR"}))))
+                                            (lk/add-env {:FOO "BAR"}))))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -112,7 +112,7 @@
 (fact
  (-> (lk/pod :foo {})
      (lk/add-container :bar "bar-image" (-> {:env [{:name :QUUX :value "TAR"}]}
-                                             (lk/add-env {:FOO "BAR"}))))
+                                            (lk/add-env {:FOO "BAR"}))))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:name :foo
@@ -155,12 +155,12 @@
      (lk/add-container :baz "some-other-image")
      (lk/stateful-set 5 {:additional-arg 123})
      (lk/add-volume-claim-template :vol-name
-                                    ;; Spec
-                                    {:accessModes ["ReadWriteOnce"]
-                                     :storageClassName :my-storage-class
-                                     :resources {:requests {:storage "1Gi"}}}
-                                    ;; Mounts
-                                    {:bar "/var/lib/foo"}))
+                                   ;; Spec
+                                   {:accessModes ["ReadWriteOnce"]
+                                    :storageClassName :my-storage-class
+                                    :resources {:requests {:storage "1Gi"}}}
+                                   ;; Mounts
+                                   {:bar "/var/lib/foo"}))
  => {:apiVersion "apps/v1"
      :kind "StatefulSet"
      :metadata {:name :foo
@@ -195,12 +195,12 @@
      (lk/add-container :bar "some-image" {:volumeMounts [{:foo :bar}]})
      (lk/stateful-set 5)
      (lk/add-volume-claim-template :vol-name
-                                    ;; Spec
-                                    {:accessModes ["ReadWriteOnce"]
-                                     :storageClassName :my-storage-class
-                                     :resources {:requests {:storage "1Gi"}}}
-                                    ;; Mounts
-                                    {:bar "/var/lib/foo"}))
+                                   ;; Spec
+                                   {:accessModes ["ReadWriteOnce"]
+                                    :storageClassName :my-storage-class
+                                    :resources {:requests {:storage "1Gi"}}}
+                                   ;; Mounts
+                                   {:bar "/var/lib/foo"}))
  => {:apiVersion "apps/v1"
      :kind "StatefulSet"
      :metadata {:name :foo
@@ -330,22 +330,22 @@
 ;; `port` is composable through composition (`comp`).
 (let [p (comp (lk/port :my-cont 80 8080)
               (lk/port :my-cont 443 443))
-       edit-svc (fn [svc src tgt]
-                  (update svc :spec lk/field-conj :ports
-                          {:port src :targetPort tgt}))
-       pod (-> (lk/pod :my-pod {})
-               (lk/add-container :my-cont "some-image"))
-       svc {:metadata {:name :foo}
-            :spec {}}
-       [pod svc] (p [pod svc edit-svc])]
-   pod => (-> (lk/pod :my-pod {})
-              (lk/add-container :my-cont "some-image" {:ports [{:containerPort 80}
-                                                               {:containerPort 443}]}))
-   svc => {:metadata {:name :foo}
-           :spec {:ports [{:port 80
-                           :targetPort 8080}
-                          {:port 443
-                           :targetPort 443}]}})
+      edit-svc (fn [svc src tgt]
+                 (update svc :spec lk/field-conj :ports
+                         {:port src :targetPort tgt}))
+      pod (-> (lk/pod :my-pod {})
+              (lk/add-container :my-cont "some-image"))
+      svc {:metadata {:name :foo}
+           :spec {}}
+      [pod svc] (p [pod svc edit-svc])]
+  pod => (-> (lk/pod :my-pod {})
+             (lk/add-container :my-cont "some-image" {:ports [{:containerPort 80}
+                                                              {:containerPort 443}]}))
+  svc => {:metadata {:name :foo}
+          :spec {:ports [{:port 80
+                          :targetPort 8080}
+                         {:port 443
+                          :targetPort 443}]}})
 
 ;; The second step involves a family of `expose*` functions, which
 ;; create different kinds of services.
@@ -399,7 +399,7 @@
      (lk/add-container :quux "some-image")
      (lk/deployment 3)
      (lk/expose-cluster-ip :foo-srv
-                (lk/port :quux 80 8080)))
+                           (lk/port :quux 80 8080)))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -425,7 +425,7 @@
      (lk/add-container :quux "some-image")
      (lk/deployment 3)
      (lk/expose-headless :foo-srv
-                (lk/port :quux 80 8080)))
+                         (lk/port :quux 80 8080)))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -534,9 +534,9 @@
 (defn module1 [$]
   (-> $
       (lk/rule :my-deployment []
-                (fn []
-                  (-> (lk/pod :my-pod {:app :my-app})
-                      (lk/deployment 3))))))
+               (fn []
+                 (-> (lk/pod :my-pod {:app :my-app})
+                     (lk/deployment 3))))))
 
 ;; This module uses the `rule` function to define a single _rule_. A
 ;; rule has a _name_, a vector of _dependencies_, and a function that
@@ -566,12 +566,12 @@
 (defn module2 [$]
   (-> $
       (lk/rule :not-going-to-work [:does-not-exist]
-                (fn [does-not-exist]
-                  (lk/pod :no-pod {:app :no-app})))
+               (fn [does-not-exist]
+                 (lk/pod :no-pod {:app :no-app})))
       (lk/rule :my-deployment [:my-deployment-num-replicas]
-                (fn [num-replicas]
-                  (-> (lk/pod :my-pod {:app :my-app})
-                      (lk/deployment num-replicas))))))
+               (fn [num-replicas]
+                 (-> (lk/pod :my-pod {:app :my-app})
+                     (lk/deployment num-replicas))))))
 
 ;; Now, if we provide a configuration that only contains
 ;; `:my-deployment-num-replicas`, but not `:not-going-to-work`,
@@ -583,29 +583,57 @@
  => [(-> (lk/pod :my-pod {:app :my-app})
          (lk/deployment 5))])
 
-;; Resources may depend on one another. The following module depends
-;; on `:my-service`.
+;; When an API object contains nested objects (a `:$additional`
+;; attribute), the nested objects are recursively extracted, and added
+;; to the returned list.
 (defn module3 [$]
   (-> $
       (lk/rule :my-service [:my-deployment-num-replicas]
-                (fn [num-replicas]
-                  (-> (lk/pod :my-service {:app :my-app})
-                      (lk/deployment num-replicas))))))
+               (fn [num-replicas]
+                 (-> (lk/pod :my-service {:app :my-app})
+                     (lk/add-container :my-cont "some-image")
+                     (lk/deployment num-replicas)
+                     (lk/expose-cluster-ip :my-service (lk/port :my-cont 80 80)))))))
 
+(fact
+ (-> (lk/injector)
+     (module3)
+     (lk/get-deployable {:my-deployment-num-replicas 5}))
+ => [(-> (lk/pod :my-service {:app :my-app})
+         (lk/add-container :my-cont "some-image"
+                           {:ports [{:containerPort 80}]})
+         (lk/deployment 5))
+     {:apiVersion "v1"
+      :kind "Service"
+      :metadata {:name :my-service}
+      :spec {:ports [{:port 80 :targetPort 80}]
+             :selector {:app :my-app}
+             :type :ClusterIP}}])
+
+;; Resources may depend on one another. The following module depends
+;; on `:my-service`.
 (defn module4 [$]
   (-> $
       (lk/rule :my-pod [:my-service]
-                (fn [my-service]
-                  (lk/pod :my-pod {:app :my-app})))))
+               (fn [my-service]
+                 (lk/pod :my-pod {:app :my-app})))))
 
 (fact
  (-> (lk/injector)
      (module4)
      (module3)
      (lk/get-deployable {:my-deployment-num-replicas 5}))
- => (concat [(-> (lk/pod :my-service {:app :my-app})
-                 (lk/deployment 5))]
-            [(lk/pod :my-pod {:app :my-app})]))
+ => [(-> (lk/pod :my-service {:app :my-app})
+         (lk/add-container :my-cont "some-image"
+                           {:ports [{:containerPort 80}]})
+         (lk/deployment 5))
+     {:apiVersion "v1"
+      :kind "Service"
+      :metadata {:name :my-service}
+      :spec {:ports [{:port 80 :targetPort 80}]
+             :selector {:app :my-app}
+             :type :ClusterIP}}
+     (lk/pod :my-pod {:app :my-app})])
 
 ;; Rules can compete with each other. For example, two rules can
 ;; define the resource `:foo`, and give it two different
@@ -670,20 +698,20 @@
 (defn module6 [$]
   (-> $
       (lk/desc (fn [obj]
-                  {:name (-> obj :metadata :name)}))
+                 {:name (-> obj :metadata :name)}))
       (lk/desc (fn [obj]
-                  (when (= (:kind "Service"))
-                    {:port (-> obj :spec :ports first :port)})))
+                 (when (= (:kind "Service"))
+                   {:port (-> obj :spec :ports first :port)})))
       (lk/desc (fn [obj]
-                  {:labels (-> obj :metadata :labels)}))
+                 {:labels (-> obj :metadata :labels)}))
       (lk/rule :first-pod []
-                (fn []
-                  (lk/pod :my-first-pod {})))
+               (fn []
+                 (lk/pod :my-first-pod {})))
       (lk/rule :second-pod [:first-pod]
-                (fn [first-pod]
-                  (lk/pod :my-first-pod {:the-name (:name first-pod)
-                                          :the-port (:port first-pod)
-                                          :the-labels (:labels first-pod)})))))
+               (fn [first-pod]
+                 (lk/pod :my-first-pod {:the-name (:name first-pod)
+                                        :the-port (:port first-pod)
+                                        :the-labels (:labels first-pod)})))))
 
 ;; The module also defines two rules for two pods. The second pod
 ;; depends on the first one, and populates its labels with information
@@ -696,8 +724,8 @@
      (lk/get-deployable {}))
  => [(lk/pod :my-first-pod {})
      (lk/pod :my-first-pod {:the-name :my-first-pod
-                             :the-port nil
-                             :the-labels {}})])
+                            :the-port nil
+                            :the-labels {}})])
 
 
 ;; # Utility Functions
@@ -715,7 +743,7 @@
      (lk/deployment 3)
      (list)
      (lk/to-yaml)) =>
-"apiVersion: apps/v1
+ "apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nginx-deployment
@@ -788,21 +816,21 @@ spec:
 ;; # Turning this to Usable YAML Files
 
 '(println (-> (lk/pod :nginx-deployment {:app :nginx})
-             (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
-             (lk/deployment 3)
-             (lk/expose-headless)
-             (lk/to-yaml)))
+              (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+              (lk/deployment 3)
+              (lk/expose-headless)
+              (lk/to-yaml)))
 
 '(println (-> (lk/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
-             (lk/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
+              (lk/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
                                                                              :name "web"}]})
-             (lk/stateful-set 3)
-             (lk/add-volume-claim-template :www
+              (lk/stateful-set 3)
+              (lk/add-volume-claim-template :www
                                             {:accessModes ["ReadWriteOnce"]
                                              :resources {:requests {:storage "1Gi"}}}
                                             {:nginx "/usr/share/nginx/html"})
-             (lk/expose-headless)
-             (lk/to-yaml)))
+              (lk/expose-headless)
+              (lk/to-yaml)))
 
 
 ;; # Under the Hood
