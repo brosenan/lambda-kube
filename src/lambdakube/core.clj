@@ -114,14 +114,33 @@
                        (merge {:selector (-> pod :metadata :labels)}))}
         [pod srv] (portfunc [pod srv editfunc])]
     (-> depl
-        (assoc :$additional srv)
+        (field-conj :$additional srv)
         (update :spec assoc :template pod))))
 
-(defn expose-cluster-ip [depl name portfunc]
-  (expose depl name portfunc {:type :ClusterIP}
+(defn expose-cluster-ip
+  ([depl name portfunc]
+   (expose-cluster-ip depl name portfunc {}))
+  ([depl name portfunc attrs]
+   (expose depl name portfunc (merge attrs {:type :ClusterIP})
+           (fn [svc src tgt]
+             (update svc :spec field-conj :ports {:port src
+                                                  :targetPort tgt})))))
+
+(defn expose-headless
+  ([depl name portfunc]
+   (expose-headless depl name portfunc {}))
+  ([depl name portfunc attrs]
+   (expose-cluster-ip depl name portfunc (merge attrs {:clusterIP :None}))))
+
+(defn expose-node-port [depl name portfunc]
+  (expose depl name portfunc {:type :NodePort}
           (fn [svc src tgt]
-            (update svc :spec field-conj :ports {:port src
-                                                 :targetPort tgt}))))
+            (let [ports {:port src}
+                  ports (if (nil? tgt)
+                          ports
+                          ;; else
+                          (assoc ports :nodePort tgt))]
+              (update svc :spec field-conj :ports ports)))))
 
 (defn injector []
   {:rules []
@@ -210,11 +229,14 @@
                         (with-meta obj {:additional additional}))
     :else obj))
 
-(defn port [cont src-port tgt-port]
-  (fn [[pod svc edit-svc]]
-    [(-> pod
-         (update-container cont field-conj :ports {:containerPort src-port}))
-     (-> svc
-         (edit-svc src-port tgt-port))
-     edit-svc]))
+(defn port
+  ([cont src-port]
+   (port cont src-port nil))
+  ([cont src-port tgt-port]
+   (fn [[pod svc edit-svc]]
+     [(-> pod
+          (update-container cont field-conj :ports {:containerPort src-port}))
+      (-> svc
+          (edit-svc src-port tgt-port))
+      edit-svc])))
 

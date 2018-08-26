@@ -378,13 +378,13 @@
                        :spec {:containers [{:name :quux
                                             :image "some-image"
                                             :ports [{:containerPort 80}]}]}}}
-     :$additional {:apiVersion "v1"
-                   :kind "Service"
-                   :metadata {:name :foo-srv}
-                   :spec {:type :NodePort
-                          :selector {:bar :baz}
-                          :ports [{:port 80
-                                   :nodePort 30080}]}}})
+     :$additional [{:apiVersion "v1"
+                    :kind "Service"
+                    :metadata {:name :foo-srv}
+                    :spec {:type :NodePort
+                           :selector {:bar :baz}
+                           :ports [{:port 80
+                                    :nodePort 30080}]}}]})
 
 ;; The `expose` function is not intended to be used directly. Instead,
 ;; `expose-*` functions cover the different service types.
@@ -410,13 +410,90 @@
                        :spec {:containers [{:name :quux
                                             :image "some-image"
                                             :ports [{:containerPort 80}]}]}}}
-     :$additional {:apiVersion "v1"
-                   :kind "Service"
-                   :metadata {:name :foo-srv}
-                   :spec {:type :ClusterIP
-                          :selector {:bar :baz}
-                          :ports [{:port 80
-                                   :targetPort 8080}]}}})
+     :$additional [{:apiVersion "v1"
+                    :kind "Service"
+                    :metadata {:name :foo-srv}
+                    :spec {:type :ClusterIP
+                           :selector {:bar :baz}
+                           :ports [{:port 80
+                                    :targetPort 8080}]}}]})
+
+;; `expose-headless` creates a `:ClusterIP` service, but sets
+;; `:clusterIP` to be `:None`.
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :quux "some-image")
+     (lk/deployment 3)
+     (lk/expose-headless :foo-srv
+                (lk/port :quux 80 8080)))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector {:matchLabels {:bar :baz}}
+            :template {:metadata {:labels {:bar :baz}}
+                       :spec {:containers [{:name :quux
+                                            :image "some-image"
+                                            :ports [{:containerPort 80}]}]}}}
+     :$additional [{:apiVersion "v1"
+                    :kind "Service"
+                    :metadata {:name :foo-srv}
+                    :spec {:type :ClusterIP
+                           :clusterIP :None
+                           :selector {:bar :baz}
+                           :ports [{:port 80
+                                    :targetPort 8080}]}}]})
+
+;; `expose-node-port` creates a service of type `:NodePort`.
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :quux "some-image")
+     (lk/deployment 3)
+     (lk/expose-node-port :foo-srv
+                          (lk/port :quux 80 30080)))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector {:matchLabels {:bar :baz}}
+            :template {:metadata {:labels {:bar :baz}}
+                       :spec {:containers [{:name :quux
+                                            :image "some-image"
+                                            :ports [{:containerPort 80}]}]}}}
+     :$additional [{:apiVersion "v1"
+                    :kind "Service"
+                    :metadata {:name :foo-srv}
+                    :spec {:type :NodePort
+                           :selector {:bar :baz}
+                           :ports [{:port 80
+                                    :nodePort 30080}]}}]})
+
+;; If the target port is omitted, a `:nodePort` is not specified in the
+;; service.
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :quux "some-image")
+     (lk/deployment 3)
+     (lk/expose-node-port :foo-srv
+                          (lk/port :quux 80)))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector {:matchLabels {:bar :baz}}
+            :template {:metadata {:labels {:bar :baz}}
+                       :spec {:containers [{:name :quux
+                                            :image "some-image"
+                                            :ports [{:containerPort 80}]}]}}}
+     :$additional [{:apiVersion "v1"
+                    :kind "Service"
+                    :metadata {:name :foo-srv}
+                    :spec {:type :NodePort
+                           :selector {:bar :baz}
+                           :ports [{:port 80}]}}]})
 
 ;; # Dependency Injection
 
