@@ -52,16 +52,17 @@
             :template template}}))
 
 (defn job
-  ([pod]
-   (job pod {}))
-  ([pod attrs]
+  ([pod restart-policy]
+   (job pod restart-policy {}))
+  ([pod restart-policy attrs]
    {:apiVersion "batch/v1"
     :kind "Job"
     :metadata {:name (-> pod :metadata :name)
                :labels (-> pod :metadata :labels)}
     :spec (merge {:template (-> pod
                                 (dissoc :apiVersion :kind)
-                                (update :metadata dissoc :name))}
+                                (update :metadata dissoc :name)
+                                (update :spec assoc :restartPolicy restart-policy))}
                  attrs)}))
 
 (defn stateful-set
