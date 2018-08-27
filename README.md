@@ -39,9 +39,9 @@ Define configuration.
 Define a `-main` function.
 ```clojure
 (defn -main []
-  (-> (lk/injector config)
+  (-> (lk/injector)
       module
-      lk/get-deployable
+      (lk/get-deployable config)
       lk/to-yaml
       (lk/kube-apply (io/file "my-app.yaml"))))
 ```
