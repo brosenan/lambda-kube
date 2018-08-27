@@ -89,18 +89,21 @@ stateful set.
 ```
 ## Job
 
-The `job` function wraps a pod with a Kubernetes job.
+The `job` function wraps a pod with a Kubernetes job. It takes a
+pod to wrap, and a `:restartPolicy` parameter, which needs to be
+either `:Never` or `:OnFailure`.
 ```clojure
 (fact
  (-> (lk/pod :my-job {:app :foo})
      (lk/add-container :bar "some-image")
-     (lk/job))
+     (lk/job :Never))
  => {:apiVersion "batch/v1"
      :kind "Job"
      :metadata {:labels {:app :foo}
                 :name :my-job}
      :spec {:template {:metadata {:labels {:app :foo}}
-                       :spec {:containers [{:image "some-image" :name :bar}]}}}})
+                       :spec {:restartPolicy :Never
+                              :containers [{:image "some-image" :name :bar}]}}}})
 
 ```
 An optional `attrs` parameter takes additional attributes to be
@@ -109,13 +112,14 @@ placed in the job's `:spec`.
 (fact
  (-> (lk/pod :my-job {:app :foo})
      (lk/add-container :bar "some-image")
-     (lk/job {:backoffLimit 5}))
+     (lk/job :OnFailure {:backoffLimit 5}))
  => {:apiVersion "batch/v1"
      :kind "Job"
      :metadata {:labels {:app :foo}
                 :name :my-job}
      :spec {:template {:metadata {:labels {:app :foo}}
-                       :spec {:containers [{:image "some-image" :name :bar}]}}
+                       :spec {:containers [{:image "some-image" :name :bar}]
+                              :restartPolicy :OnFailure}}
             :backoffLimit 5}})
 
 ```
@@ -281,16 +285,6 @@ strings, representing the content of files. It does the following:
                                    {"c0" (lk/to-yaml {:foo :bar})
                                     "c1" "echo hello world"})]})
 
-(-> (lk/pod :foo {:bar :baz})
-     (lk/add-container :bar "some-image")
-     (lk/add-container :baz "some-other-image")
-     (lk/add-files-to-container :bar :unique1234 "/path/on/bar"
-                                {"conf/config.conf" (lk/to-yaml [{:foo :bar}])
-                                 "bin/script.sh" "#!/bin/sh\necho hello world"})
-     (lk/extract-additional)
-     ((fn [x] (cons x (-> x meta :additional))))
-     (lk/to-yaml)
-     (println))
 ```
 The `add-volume-claim-template` function takes a stateful-set, adds
 a volume claim template to its spec and mounts it to the given
