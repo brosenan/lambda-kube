@@ -115,6 +115,38 @@
   ([pod name image]
    (add-init-container pod name image {})))
 
+(defn update-container [pod cont-name f & args]
+  (let [update-cont (fn [cont]
+                      (if (= (:name cont) cont-name)
+                        (apply f cont args)
+                        ;; else
+                        cont))]
+    (update-in pod [:spec :containers] #(map update-cont %))))
+
+(defn add-volume [pod name spec mounts]
+  (let [mount-func (apply comp (for [[cont path] mounts]
+                                 #(update-container % cont field-conj :volumeMounts
+                                                    {:name name
+                                                     :mountPath path})))]
+    (-> pod
+        (update :spec field-conj :volumes (-> {:name name}
+                                              (merge spec)))
+        (mount-func))))
+
+(defn add-files-to-container [pod cont unique base-path mounts]
+  (let [relpathmap (into {} (for [[i [path val]] (map-indexed vector mounts)]
+                              [(str "c" i) val]))
+        items (vec (for [[i [path val]] (map-indexed vector mounts)]
+                     {:key (str "c" i)
+                      :path path}))]
+    (-> pod
+        (field-conj :$additional (config-map unique relpathmap))
+        (add-volume unique {:configMap {:name unique
+                                        :items items}} {})
+        (update-container cont field-conj :volumeMounts
+                          {:name unique
+                           :mountPath base-path}))))
+
 (defn add-volume-claim-template [sset name spec mounts]
   (let [add-mount (fn [cont]
                     (if (contains? mounts (:name cont))
@@ -130,14 +162,6 @@
 
 (defn update-template [ctrl f & args]
   (apply update-in ctrl [:spec :template] f args))
-
-(defn update-container [pod cont-name f & args]
-  (let [update-cont (fn [cont]
-                      (if (= (:name cont) cont-name)
-                        (apply f cont args)
-                        ;; else
-                        cont))]
-    (update-in pod [:spec :containers] #(map update-cont %))))
 
 (defn expose [depl name portfunc attrs editfunc]
   (let [pod (-> depl :spec :template)

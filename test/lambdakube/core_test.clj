@@ -190,6 +190,69 @@
                               :image "my-image:tag"
                               :other :params}]}})
 
+;; ### Volumes
+
+;; The `add-volume` function takes a pod, a name, a spec for a volume
+;; and a map, mapping from container names to paths, and adds the
+;; volume to the pod, mounting it to the specified containers.
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/add-container :baz "some-other-image")
+     (lk/add-volume :my-vol
+                    {:configMap {:name :my-config-map}}
+                    {:bar "/path/in/bar"
+                     :baz "/path/in/baz"}))
+ => {:apiVersion "v1"
+     :kind "Pod"
+     :metadata {:labels {:bar :baz}
+                :name :foo}
+     :spec {:containers [{:image "some-image"
+                          :name :bar
+                          :volumeMounts [{:name :my-vol
+                                          :mountPath "/path/in/bar"}]}
+                         {:image "some-other-image"
+                          :name :baz
+                          :volumeMounts [{:name :my-vol
+                                          :mountPath "/path/in/baz"}]}]
+            :volumes [{:name :my-vol
+                       :configMap {:name :my-config-map}}]}})
+
+;; A common special case for a volume is when we wish to inject files
+;; into a specific container. We can do so using a config-map.
+
+;; The `add-files-to-container` function takes a pod, a container
+;; name, a unique name, a base path and a map from relative paths to
+;; strings, representing the content of files. It does the following:
+;; 1. Creates a config map (with the unique name).
+;; 2. Adds a volume to the pod, referencing this config-map, specifying the relative paths.
+;; 3. Mounts the volume to the container, at the base path.
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/add-container :baz "some-other-image")
+     (lk/add-files-to-container :bar :unique1234 "/path/on/bar"
+                                {"conf/config.conf" (lk/to-yaml {:foo :bar})
+                                 "bin/script.sh" "echo hello world"}))
+ => {:apiVersion "v1"
+     :kind "Pod"
+     :metadata {:labels {:bar :baz} :name :foo}
+     :spec {:containers [{:image "some-image"
+                          :name :bar
+                          :volumeMounts [{:name :unique1234
+                                          :mountPath "/path/on/bar"}]}
+                         {:image "some-other-image"
+                          :name :baz}]
+            :volumes [{:name :unique1234
+                       :configMap {:name :unique1234
+                                   :items [{:key "c0"
+                                            :path "conf/config.conf"}
+                                           {:key "c1"
+                                            :path "bin/script.sh"}]}}]}
+     :$additional [(lk/config-map :unique1234
+                                   {"c0" (lk/to-yaml {:foo :bar})
+                                    "c1" "echo hello world"})]})
+
 ;; The `add-volume-claim-template` function takes a stateful-set, adds
 ;; a volume claim template to its spec and mounts it to the given
 ;; paths within the given containers.
