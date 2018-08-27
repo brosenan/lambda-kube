@@ -10,6 +10,8 @@
 
 The following functions create basic API objects.
 
+## Pod
+
 The `pod` function creates a pod with no containers.
 ```clojure
 (fact
@@ -32,6 +34,8 @@ The `pod` function creates a pod with no containers.
      :spec {:foo :bar}})
 
 ```
+## Deployment
+
 The `deployment` function creates a deployment, based on the given
 pod as template. The deployment takes its name from the given pod,
 and removes the name from the template.
@@ -79,6 +83,38 @@ stateful set.
               [{:name :bar
                 :image "some-image"}]}}
             :volumeClaimTemplates []}})
+
+```
+## Job
+
+The `job` function wraps a pod with a Kubernetes job.
+```clojure
+(fact
+ (-> (lk/pod :my-job {:app :foo})
+     (lk/add-container :bar "some-image")
+     (lk/job))
+ => {:apiVersion "batch/v1"
+     :kind "Job"
+     :metadata {:labels {:app :foo}
+                :name :my-job}
+     :spec {:template {:metadata {:labels {:app :foo}}
+                       :spec {:containers [{:image "some-image" :name :bar}]}}}})
+
+```
+An optional `attrs` parameter takes additional attributes to be
+placed in the job's `:spec`.
+```clojure
+(fact
+ (-> (lk/pod :my-job {:app :foo})
+     (lk/add-container :bar "some-image")
+     (lk/job {:backoffLimit 5}))
+ => {:apiVersion "batch/v1"
+     :kind "Job"
+     :metadata {:labels {:app :foo}
+                :name :my-job}
+     :spec {:template {:metadata {:labels {:app :foo}}
+                       :spec {:containers [{:image "some-image" :name :bar}]}}
+            :backoffLimit 5}})
 
 ```
 # Modifier Functions
@@ -355,7 +391,7 @@ and returns a function that transforms both a pod and a service.
                            :targetPort 8080}]}}))
 
 ```
-`port` is composable through composition (`comp`).
+`port` is composable through functional composition (`comp`).
 ```clojure
 (let [p (comp (lk/port :my-cont 80 8080)
               (lk/port :my-cont 443 443))
@@ -452,6 +488,8 @@ returns a ClusterIP service.
                                     :targetPort 8080}]}}]})
 
 ```
+## Headless Services
+
 `expose-headless` creates a `:ClusterIP` service, but sets
 `:clusterIP` to be `:None`.
 ```clojure
@@ -481,6 +519,8 @@ returns a ClusterIP service.
                                     :targetPort 8080}]}}]})
 
 ```
+## NodePort Services
+
 `expose-node-port` creates a service of type `:NodePort`.
 ```clojure
 (fact
@@ -883,28 +923,6 @@ deleted, to make sure it is applied next time.
     => {:exit 33
         :err "there was a problem with foo"})
    (.exists f) => false))
-
-```
-# Turning this to Usable YAML Files
-
-```clojure
-'(println (-> (lk/pod :nginx-deployment {:app :nginx})
-              (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
-              (lk/deployment 3)
-              (lk/expose-headless)
-              (lk/to-yaml)))
-
-'(println (-> (lk/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
-              (lk/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
-                                                                             :name "web"}]})
-              (lk/stateful-set 3)
-              (lk/add-volume-claim-template :www
-                                            {:accessModes ["ReadWriteOnce"]
-                                             :resources {:requests {:storage "1Gi"}}}
-                                            {:nginx "/usr/share/nginx/html"})
-              (lk/expose-headless)
-              (lk/to-yaml)))
-
 
 ```
 # Under the Hood

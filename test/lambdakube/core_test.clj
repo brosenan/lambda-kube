@@ -8,6 +8,8 @@
 
 ;; The following functions create basic API objects.
 
+;; ## Pod
+
 ;; The `pod` function creates a pod with no containers.
 (fact
  (lk/pod :foo {:app :bar})
@@ -25,6 +27,8 @@
      :metadata {:name :foo
                 :labels {:app :bar}}
      :spec {:foo :bar}})
+
+;; ## Deployment
 
 ;; The `deployment` function creates a deployment, based on the given
 ;; pod as template. The deployment takes its name from the given pod,
@@ -70,6 +74,34 @@
               [{:name :bar
                 :image "some-image"}]}}
             :volumeClaimTemplates []}})
+
+;; ## Job
+
+;; The `job` function wraps a pod with a Kubernetes job.
+(fact
+ (-> (lk/pod :my-job {:app :foo})
+     (lk/add-container :bar "some-image")
+     (lk/job))
+ => {:apiVersion "batch/v1"
+     :kind "Job"
+     :metadata {:labels {:app :foo}
+                :name :my-job}
+     :spec {:template {:metadata {:labels {:app :foo}}
+                       :spec {:containers [{:image "some-image" :name :bar}]}}}})
+
+;; An optional `attrs` parameter takes additional attributes to be
+;; placed in the job's `:spec`.
+(fact
+ (-> (lk/pod :my-job {:app :foo})
+     (lk/add-container :bar "some-image")
+     (lk/job {:backoffLimit 5}))
+ => {:apiVersion "batch/v1"
+     :kind "Job"
+     :metadata {:labels {:app :foo}
+                :name :my-job}
+     :spec {:template {:metadata {:labels {:app :foo}}
+                       :spec {:containers [{:image "some-image" :name :bar}]}}
+            :backoffLimit 5}})
 
 ;; # Modifier Functions
 
@@ -327,7 +359,7 @@
            :spec {:ports [{:port 80
                            :targetPort 8080}]}}))
 
-;; `port` is composable through composition (`comp`).
+;; `port` is composable through functional composition (`comp`).
 (let [p (comp (lk/port :my-cont 80 8080)
               (lk/port :my-cont 443 443))
       edit-svc (fn [svc src tgt]
@@ -418,6 +450,8 @@
                            :ports [{:port 80
                                     :targetPort 8080}]}}]})
 
+;; ## Headless Services
+
 ;; `expose-headless` creates a `:ClusterIP` service, but sets
 ;; `:clusterIP` to be `:None`.
 (fact
@@ -444,6 +478,8 @@
                            :selector {:bar :baz}
                            :ports [{:port 80
                                     :targetPort 8080}]}}]})
+
+;; ## NodePort Services
 
 ;; `expose-node-port` creates a service of type `:NodePort`.
 (fact

@@ -51,6 +51,19 @@
             :selector {:matchLabels labels}
             :template template}}))
 
+(defn job
+  ([pod]
+   (job pod {}))
+  ([pod attrs]
+   {:apiVersion "batch/v1"
+    :kind "Job"
+    :metadata {:name (-> pod :metadata :name)
+               :labels (-> pod :metadata :labels)}
+    :spec (merge {:template (-> pod
+                                (dissoc :apiVersion :kind)
+                                (update :metadata dissoc :name))}
+                 attrs)}))
+
 (defn stateful-set
   ([pod replicas options]
    (let [name (-> pod :metadata :name)
