@@ -52,6 +52,8 @@
               [{:name :bar
                 :image "some-image"}]}}}})
 
+;; # Stateful Set
+
 ;; The `stateful-set` function wraps the given pod with a Kubernetes
 ;; stateful set.
 (fact
@@ -102,6 +104,16 @@
      :spec {:template {:metadata {:labels {:app :foo}}
                        :spec {:containers [{:image "some-image" :name :bar}]}}
             :backoffLimit 5}})
+
+;; ## Config Map
+
+;; The `config-map` function creates a Kubernetes configmap out of a
+;; Clojure map.
+(fact
+ (lk/config-map :my-map {"config.conf" (lk/to-yaml [{:foo :bar}])})
+ => {:apiVersion "v1"
+     :metadata {:name :my-map}
+     :data {"config.conf" "foo: bar\n"}})
 
 ;; # Modifier Functions
 

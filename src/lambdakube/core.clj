@@ -85,6 +85,11 @@
   ([pod replicas]
    (stateful-set pod replicas {})))
 
+(defn config-map [name m]
+  {:apiVersion "v1"
+   :metadata {:name name}
+   :data m})
+
 (defn add-container
   ([pod name image options]
    (let [container (-> options
