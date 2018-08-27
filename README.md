@@ -20,20 +20,14 @@ Define a module function, defining the different parts of the system.
 (defn module [$]
   (-> $
       ;; A rule defines a resource (:frontend) and dependencies ([:num-fe-replicas]).
-      (lk/rule :frontend [:num-fe-replicas]
-	           ;; The function takes the dependencies as parameters and returns (an) API object(s)
-               (fn [num-replicas]
-                 (-> ;; Define a pod
-                     (lk/pod :nginx {:app :guesbook
-                                     :tier :frontend})
-                     ;; Add a container to it
-                     (lk/add-container :nginx "nginx:1.7.9"
-                                       {:ports [{:containerPort 80}]})
-                     ;; Make a deployment out of it
+      (lk/rule :frontend [:backend-master :backend-slave :num-fe-replicas]
+               (fn [master slave num-replicas]
+                 (-> (lk/pod :frontend {:app :guesbook
+                                        :tier :frontend})
+                     (lk/add-container :php-redis "gcr.io/google-samples/gb-frontend:v4"
+                                       (lk/add-env {}  {:GET_HOST_FROM :dns}))
                      (lk/deployment num-replicas)
-                     ;; Expose it as a service
-                     (lk/expose {:ports [{:port 80}]
-                                 :type :NodePort}))))))
+                     (lk/expose-node-port :frontend (lk/port :php-redis 80)))))))
 ```
 
 Define configuration.

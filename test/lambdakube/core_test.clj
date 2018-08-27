@@ -813,26 +813,6 @@ spec:
         :err "there was a problem with foo"})
    (.exists f) => false))
 
-;; # Turning this to Usable YAML Files
-
-'(println (-> (lk/pod :nginx-deployment {:app :nginx})
-              (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
-              (lk/deployment 3)
-              (lk/expose-headless)
-              (lk/to-yaml)))
-
-'(println (-> (lk/pod :nginx {:app :nginx} {:terminationGracePeriodSeconds 10})
-              (lk/add-container :nginx "k8s.gcr.io/nginx-slim:0.8" {:ports [{:containerPort 80
-                                                                             :name "web"}]})
-              (lk/stateful-set 3)
-              (lk/add-volume-claim-template :www
-                                            {:accessModes ["ReadWriteOnce"]
-                                             :resources {:requests {:storage "1Gi"}}}
-                                            {:nginx "/usr/share/nginx/html"})
-              (lk/expose-headless)
-              (lk/to-yaml)))
-
-
 ;; # Under the Hood
 
 ;; ## Flattening Nested API Objects
