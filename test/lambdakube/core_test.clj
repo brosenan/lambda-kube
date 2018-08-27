@@ -112,6 +112,7 @@
 (fact
  (lk/config-map :my-map {"config.conf" (lk/to-yaml [{:foo :bar}])})
  => {:apiVersion "v1"
+     :kind "ConfigMap"
      :metadata {:name :my-map}
      :data {"config.conf" "foo: bar\n"}})
 
@@ -253,6 +254,16 @@
                                    {"c0" (lk/to-yaml {:foo :bar})
                                     "c1" "echo hello world"})]})
 
+(-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/add-container :baz "some-other-image")
+     (lk/add-files-to-container :bar :unique1234 "/path/on/bar"
+                                {"conf/config.conf" (lk/to-yaml [{:foo :bar}])
+                                 "bin/script.sh" "#!/bin/sh\necho hello world"})
+     (lk/extract-additional)
+     ((fn [x] (cons x (-> x meta :additional))))
+     (lk/to-yaml)
+     (println))
 ;; The `add-volume-claim-template` function takes a stateful-set, adds
 ;; a volume claim template to its spec and mounts it to the given
 ;; paths within the given containers.

@@ -87,6 +87,7 @@
 
 (defn config-map [name m]
   {:apiVersion "v1"
+   :kind "ConfigMap"
    :metadata {:name name}
    :data m})
 
