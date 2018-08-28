@@ -1,4 +1,4 @@
-;; * [Clojure Nanoservices](#clojure-nanoservices)
+* [Clojure Nanoservices](#clojure-nanoservices)
 ```clojure
 (ns lambdakube.util-test
   (:require [midje.sweet :refer :all]
