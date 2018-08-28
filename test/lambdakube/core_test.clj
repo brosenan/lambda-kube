@@ -418,11 +418,12 @@
 
 ;; Lambda-Kube takes a two-step approach to allow the exposure of
 ;; network interfaces. The first step involves the `port`
-;; function. This function takes a name of a container, a port number
-;; on that container and (optionally) a port number to be exported,
-;; and returns a function that transforms both a pod and a service.
+;; function. This function takes a name of a container, a name for the
+;; port, a port number on that container and (optionally) a port
+;; number to be exported. It returns a function that transforms both a
+;; pod and a service.
 (fact
- (let [p (lk/port :my-cont 80 8080)
+ (let [p (lk/port :my-cont :web 80 8080)
        ;; Based on the kind of service, we provide a function that
        ;; updates the service with the new ports.
        edit-svc (fn [svc src tgt]
@@ -434,14 +435,15 @@
             :spec {}}
        [pod svc] (p [pod svc edit-svc])]
    pod => (-> (lk/pod :my-pod {})
-              (lk/add-container :my-cont "some-image" {:ports [{:containerPort 80}]}))
+              (lk/add-container :my-cont "some-image" {:ports [{:containerPort 80
+                                                                :name :web}]}))
    svc => {:metadata {:name :foo}
            :spec {:ports [{:port 80
                            :targetPort 8080}]}}))
 
 ;; `port` is composable through functional composition (`comp`).
-(let [p (comp (lk/port :my-cont 80 8080)
-              (lk/port :my-cont 443 443))
+(let [p (comp (lk/port :my-cont :web 80 8080)
+              (lk/port :my-cont :https 443 443))
       edit-svc (fn [svc src tgt]
                  (update svc :spec lk/field-conj :ports
                          {:port src :targetPort tgt}))
@@ -475,7 +477,7 @@
      (lk/add-container :quux "some-image")
      (lk/deployment 3)
      (lk/expose :foo-srv
-                (lk/port :quux 80 30080)
+                (lk/port :quux :web 80 30080)
                 {:type :NodePort}
                 (fn [svc src tgt]
                   (update svc :spec lk/field-conj :ports
@@ -489,7 +491,8 @@
             :template {:metadata {:labels {:bar :baz}}
                        :spec {:containers [{:name :quux
                                             :image "some-image"
-                                            :ports [{:containerPort 80}]}]}}}
+                                            :ports [{:containerPort 80
+                                                     :name :web}]}]}}}
      :$additional [{:apiVersion "v1"
                     :kind "Service"
                     :metadata {:name :foo-srv}
@@ -511,7 +514,7 @@
      (lk/add-container :quux "some-image")
      (lk/deployment 3)
      (lk/expose-cluster-ip :foo-srv
-                           (lk/port :quux 80 8080)))
+                           (lk/port :quux :web 80 8080)))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -521,7 +524,8 @@
             :template {:metadata {:labels {:bar :baz}}
                        :spec {:containers [{:name :quux
                                             :image "some-image"
-                                            :ports [{:containerPort 80}]}]}}}
+                                            :ports [{:containerPort 80
+                                                     :name :web}]}]}}}
      :$additional [{:apiVersion "v1"
                     :kind "Service"
                     :metadata {:name :foo-srv}
@@ -539,7 +543,7 @@
      (lk/add-container :quux "some-image")
      (lk/deployment 3)
      (lk/expose-headless :foo-srv
-                         (lk/port :quux 80 8080)))
+                         (lk/port :quux :web 80 8080)))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -549,7 +553,8 @@
             :template {:metadata {:labels {:bar :baz}}
                        :spec {:containers [{:name :quux
                                             :image "some-image"
-                                            :ports [{:containerPort 80}]}]}}}
+                                            :ports [{:containerPort 80
+                                                     :name :web}]}]}}}
      :$additional [{:apiVersion "v1"
                     :kind "Service"
                     :metadata {:name :foo-srv}
@@ -567,7 +572,7 @@
      (lk/add-container :quux "some-image")
      (lk/deployment 3)
      (lk/expose-node-port :foo-srv
-                          (lk/port :quux 80 30080)))
+                          (lk/port :quux :web 80 30080)))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -577,7 +582,8 @@
             :template {:metadata {:labels {:bar :baz}}
                        :spec {:containers [{:name :quux
                                             :image "some-image"
-                                            :ports [{:containerPort 80}]}]}}}
+                                            :ports [{:containerPort 80
+                                                     :name :web}]}]}}}
      :$additional [{:apiVersion "v1"
                     :kind "Service"
                     :metadata {:name :foo-srv}
@@ -593,7 +599,7 @@
      (lk/add-container :quux "some-image")
      (lk/deployment 3)
      (lk/expose-node-port :foo-srv
-                          (lk/port :quux 80)))
+                          (lk/port :quux :web 80)))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -603,7 +609,8 @@
             :template {:metadata {:labels {:bar :baz}}
                        :spec {:containers [{:name :quux
                                             :image "some-image"
-                                            :ports [{:containerPort 80}]}]}}}
+                                            :ports [{:containerPort 80
+                                                     :name :web}]}]}}}
      :$additional [{:apiVersion "v1"
                     :kind "Service"
                     :metadata {:name :foo-srv}
@@ -709,7 +716,7 @@
                  (-> (lk/pod :my-service {:app :my-app})
                      (lk/add-container :my-cont "some-image")
                      (lk/deployment num-replicas)
-                     (lk/expose-cluster-ip :my-service (lk/port :my-cont 80 80)))))))
+                     (lk/expose-cluster-ip :my-service (lk/port :my-cont :web 80 80)))))))
 
 (fact
  (-> (lk/injector)
@@ -717,7 +724,8 @@
      (lk/get-deployable {:my-deployment-num-replicas 5}))
  => [(-> (lk/pod :my-service {:app :my-app})
          (lk/add-container :my-cont "some-image"
-                           {:ports [{:containerPort 80}]})
+                           {:ports [{:containerPort 80
+                                     :name :web}]})
          (lk/deployment 5))
      {:apiVersion "v1"
       :kind "Service"
@@ -741,7 +749,8 @@
      (lk/get-deployable {:my-deployment-num-replicas 5}))
  => [(-> (lk/pod :my-service {:app :my-app})
          (lk/add-container :my-cont "some-image"
-                           {:ports [{:containerPort 80}]})
+                           {:ports [{:containerPort 80
+                                     :name :web}]})
          (lk/deployment 5))
      {:apiVersion "v1"
       :kind "Service"
@@ -858,7 +867,7 @@
                  (-> (lk/pod :my-depl {})
                      (lk/add-container :foo "some-image")
                      (lk/deployment 3)
-                     (lk/expose-cluster-ip :my-svc (lk/port :foo 80 80)))))))
+                     (lk/expose-cluster-ip :my-svc (lk/port :foo :web 80 80)))))))
 
 ;; Now, if we use this module in conjunction with `module6`, and
 ;; provide the configuration parameter that triggers our new
@@ -874,6 +883,12 @@
                             :the-hostname :my-svc
                             :the-labels {}}))
 
+;; ## Standard Describers
+
+;; While users are free to define their own describers, Lambda-Kube
+;; provides a `standard-descs` module, containing some standard
+;; describers.
+
 ;; # Interacting with Kubernetes
 
 ;; All the above functions are pure functions that help build
@@ -887,7 +902,7 @@
  (-> (lk/pod :nginx-deployment {:app :nginx})
      (lk/add-container :nginx "nginx:1.7.9")
      (lk/deployment 3)
-     (lk/expose-cluster-ip :nginx-svc (lk/port :nginx 80 80))
+     (lk/expose-cluster-ip :nginx-svc (lk/port :nginx :web 80 80))
      (lk/extract-additional)
      ((fn [x] (cons x (-> x meta :additional))))
      (lk/to-yaml)) =>
@@ -912,6 +927,7 @@ spec:
         image: nginx:1.7.9
         ports:
         - containerPort: 80
+          name: web
 ---
 kind: Service
 apiVersion: v1

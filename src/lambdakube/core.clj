@@ -285,12 +285,13 @@
         (throw (Exception. (:err res)))))))
 
 (defn port
-  ([cont src-port]
-   (port cont src-port nil))
-  ([cont src-port tgt-port]
+  ([cont portname src-port]
+   (port cont portname src-port nil))
+  ([cont portname src-port tgt-port]
    (fn [[pod svc edit-svc]]
      [(-> pod
-          (update-container cont field-conj :ports {:containerPort src-port}))
+          (update-container cont field-conj :ports {:containerPort src-port
+                                                    :name portname}))
       (-> svc
           (edit-svc src-port tgt-port))
       edit-svc])))
