@@ -182,10 +182,10 @@
    (expose-cluster-ip depl name portfunc {}))
   ([depl name portfunc attrs]
    (expose depl name portfunc (merge attrs {:type :ClusterIP})
-           (fn [svc podport svcport]
+           (fn [svc portname podport svcport]
              (update svc :spec field-conj :ports {:port svcport
-                                                  :name podport
-                                                  :targetPort podport})))))
+                                                  :name portname
+                                                  :targetPort portname})))))
 
 (defn expose-headless
   ([depl name portfunc]
@@ -195,9 +195,10 @@
 
 (defn expose-node-port [depl name portfunc]
   (expose depl name portfunc {:type :NodePort}
-          (fn [svc podport svcport]
-            (let [ports {:targetPort podport
-                         :name podport}
+          (fn [svc portname podport svcport]
+            (let [ports {:targetPort portname
+                         :name portname
+                         :port podport}
                   ports (if (nil? svcport)
                           ports
                           ;; else
@@ -295,6 +296,6 @@
           (update-container cont field-conj :ports {:containerPort podport
                                                     :name portname}))
       (-> svc
-          (edit-svc portname svcport))
+          (edit-svc portname podport svcport))
       edit-svc])))
 

@@ -483,9 +483,9 @@ pod and a service.
  (let [p (lk/port :my-cont :web 80 8080)
        ;; Based on the kind of service, we provide a function that
        ;; updates the service with the new ports.
-       edit-svc (fn [svc podport svcport]
+       edit-svc (fn [svc podname podport svcport]
                   (update svc :spec lk/field-conj :ports
-                          {:port svcport :targetPort podport :name podport}))
+                          {:port svcport :targetPort podport :name podname}))
        pod (-> (lk/pod :my-pod {})
                (lk/add-container :my-cont "some-image"))
        svc {:metadata {:name :foo}
@@ -496,7 +496,7 @@ pod and a service.
                                                                 :name :web}]}))
    svc => {:metadata {:name :foo}
            :spec {:ports [{:port 8080
-                           :targetPort :web
+                           :targetPort 80
                            :name :web}]}}))
 
 ```
@@ -505,9 +505,9 @@ pod and a service.
 (fact
  (let [p (comp (lk/port :my-cont :web 80 8080)
                (lk/port :my-cont :https 443 443))
-       edit-svc (fn [svc podport svcport]
+       edit-svc (fn [svc portname podport svcport]
                   (update svc :spec lk/field-conj :ports
-                          {:port svcport :targetPort podport}))
+                          {:port svcport :targetPort podport :name portname}))
        pod (-> (lk/pod :my-pod {})
                (lk/add-container :my-cont "some-image"))
        svc {:metadata {:name :foo}
@@ -520,9 +520,11 @@ pod and a service.
                                                                 :name :web}]}))
    svc => {:metadata {:name :foo}
            :spec {:ports [{:port 443
-                           :targetPort :https}
+                           :targetPort 443
+                           :name :https}
                           {:port 8080
-                           :targetPort :web}]}}))
+                           :targetPort 80
+                           :name :web}]}}))
 
 ```
 The second step involves a family of `expose*` functions, which
@@ -544,9 +546,9 @@ It returns the deployment-like object augmented such that:
      (lk/expose :foo-srv
                 (lk/port :quux :web 80 30080)
                 {:type :NodePort}
-                (fn [svc src tgt]
+                (fn [svc portname podport svcport]
                   (update svc :spec lk/field-conj :ports
-                          {:port src :nodePort tgt}))))
+                          {:port podport :nodePort svcport}))))
  => {:apiVersion "apps/v1"
      :kind "Deployment"
      :metadata {:name :foo
@@ -563,7 +565,7 @@ It returns the deployment-like object augmented such that:
                     :metadata {:name :foo-srv}
                     :spec {:type :NodePort
                            :selector {:bar :baz}
-                           :ports [{:port :web
+                           :ports [{:port 80
                                     :nodePort 30080}]}}]})
 
 ```
@@ -664,6 +666,7 @@ returns a ClusterIP service.
                            :selector {:bar :baz}
                            :ports [{:targetPort :web
                                     :name :web
+                                    :port 80
                                     :nodePort 30080}]}}]})
 
 ```
@@ -693,7 +696,8 @@ service.
                     :spec {:type :NodePort
                            :selector {:bar :baz}
                            :ports [{:targetPort :web
-                                    :name :web}]}}]})
+                                    :name :web
+                                    :port 80}]}}]})
 
 ```
 # Dependency Injection
