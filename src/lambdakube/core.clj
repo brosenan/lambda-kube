@@ -155,6 +155,10 @@
                                                       :spec spec})
       (update-template (mount-func name mounts))))
 
+(defn add-annotation [obj key val]
+  (-> obj
+      (update-in [:metadata :annotations] assoc key val)))
+
 (defn update-template [ctrl f & args]
   (apply update-in ctrl [:spec :template] f args))
 

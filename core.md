@@ -7,6 +7,7 @@
 * [Modifier Functions](#modifier-functions)
   * [Add Functions](#add-functions)
     * [Volumes](#volumes)
+    * [Annotations](#annotations)
   * [Update Functions](#update-functions)
 * [Exposure Functions](#exposure-functions)
   * [ClusterIP Services](#clusterip-services)
@@ -388,6 +389,27 @@ new mount is appended.
               :spec {:accessModes ["ReadWriteOnce"]
                      :storageClassName :my-storage-class
                      :resources {:requests {:storage "1Gi"}}}}]}})
+
+```
+### Annotations
+
+Annotations are arbitrary key/value pairs which can appear in the
+`:metadata` of any Kubernetes object. Annotation keys may be
+namespaced, and we encourage the use of namespaced keywords (e.g.,
+`::foo`) for keys.
+
+The function `add-annotation` takes an API object, a key and a
+value, and adds an annotation.
+```clojure
+(fact
+ (-> (lk/pod :foo {})
+     (lk/add-annotation ::my-annotation "This is some value"))
+ => {:apiVersion "v1"
+     :kind "Pod"
+     :metadata {:labels {}
+                :name :foo
+                :annotations {::my-annotation "This is some value"}}
+     :spec {}})
 
 ```
 ## Update Functions
