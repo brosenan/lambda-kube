@@ -22,12 +22,19 @@ Define a module function, defining the different parts of the system.
       ;; A rule defines a resource (:frontend) and dependencies ([:num-fe-replicas]).
       (lk/rule :frontend [:backend-master :backend-slave :num-fe-replicas]
                (fn [master slave num-replicas]
+                 ;; We start with an empty pod.
                  (-> (lk/pod :frontend {:app :guesbook
                                         :tier :frontend})
+                     ;; We add a container, specifying a name, image and environments.
                      (lk/add-container :php-redis "gcr.io/google-samples/gb-frontend:v4"
                                        (lk/add-env {}  {:GET_HOST_FROM :dns}))
+                     ;; We load three files from resources and mount them to the container
+                     (lk/add-files-to-container :php-redis :new-gb-fe-files "/var/www/html"
+                                                (map-resources ["index.html" "controllers.js" "guestbook.php"]))
+                     ;; Then we wrap the pod with a deployment, specifying the number of replicas.
                      (lk/deployment num-replicas)
-                     (lk/expose-node-port :frontend (lk/port :php-redis 80)))))))
+                     ;; Finally, we expose port 80 using a NodePort service.
+                     (lk/expose-node-port :frontend (lk/port :php-redis :web 80)))))))
 ```
 
 Define configuration.
