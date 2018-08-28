@@ -924,6 +924,46 @@
 ;; provides a `standard-descs` module, containing some standard
 ;; describers.
 
+;; Consider the following module, defining a deployment, exposed as a
+;; service, with some annotations, and a pod that depends on it.
+(defn module8 [$]
+  (-> $
+      (lk/rule :my-service [:my-deployment-num-replicas]
+               (fn [num-replicas]
+                 (-> (lk/pod :my-deployment {:foo :bar})
+                     (lk/add-container :quux "some-image")
+                     (lk/deployment num-replicas)
+                     (lk/add-annotation ::key "val")
+                     (lk/expose-cluster-ip :my-service
+                                           (lk/port :quux :web 80 80)))))
+      (lk/rule :my-pod [:my-service]
+               (fn [my-service]
+                 (-> (lk/pod :my-pod {;; The :annotations attribute contains the object's annotations,
+                                      ;; if they are defined.
+                                      :x (-> my-service :annotations ::key)})
+                     (lk/add-container :baz "some-image"
+                                       (lk/add-env {} {;; The :hostname attribute holds the name of the service
+                                                       :MY_SVC_HOSTNAME (:hostname my-service)
+                                                       ;; The :ports attribute is a map, mapping from
+                                                       ;; port names to service port numbers.
+                                                       :MY_SVC_WEB_PORT (-> my-service :ports :web)})))))))
+
+;; Now, when we use this module in conjunction with the
+;; `standard-descs` module, the information about the dependency
+;; (`:my-service` is provided to the dependent (`:my-pod`).
+(fact
+ (-> (lk/injector)
+     (module8)
+     (lk/standard-descs)
+     (lk/get-deployable {:my-deployment-num-replicas 3})
+     (last))
+ => (-> (lk/pod :my-pod {:x "val"})
+        (lk/add-container :baz "some-image"
+                          (lk/add-env {} {:MY_SVC_HOSTNAME :my-service
+                                          :MY_SVC_WEB_PORT 80}))))
+
+
+
 ;; # Interacting with Kubernetes
 
 ;; All the above functions are pure functions that help build
