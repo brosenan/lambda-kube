@@ -1,3 +1,22 @@
+;; * [Basic API Object Functions](#basic-api-object-functions)
+;;   * [Pod](#pod)
+;;   * [Deployment](#deployment)
+;; * [Stateful Set](#stateful-set)
+;;   * [Job](#job)
+;;   * [Config Map](#config-map)
+;; * [Modifier Functions](#modifier-functions)
+;;   * [Add Functions](#add-functions)
+;;     * [Volumes](#volumes)
+;;   * [Update Functions](#update-functions)
+;; * [Exposure Functions](#exposure-functions)
+;;   * [ClusterIP Services](#clusterip-services)
+;;   * [Headless Services](#headless-services)
+;;   * [NodePort Services](#nodeport-services)
+;; * [Dependency Injection](#dependency-injection)
+;;   * [Describers and Descriptions](#describers-and-descriptions)
+;; * [Utility Functions](#utility-functions)
+;; * [Under the Hood](#under-the-hood)
+;;   * [Flattening Nested API Objects](#flattening-nested-api-objects)
 ```clojure
 (ns lambdakube.core-test
   (:require [midje.sweet :refer :all]
