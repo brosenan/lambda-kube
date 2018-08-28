@@ -229,10 +229,17 @@
                             [index res])))]
     (map rulemap (topsort g))))
 
-(defn- describe [api-obj descs]
+(defn- describe-single [api-obj descs]
   (->> descs
        (map (fn [f] (f api-obj)))
        (reduce merge {})))
+
+(defn- describe [api-obj descs]
+  (let [api-obj (extract-additional api-obj)
+        objs (cons api-obj (-> api-obj meta :additional))]
+    (->> objs
+         (map #(describe-single % descs))
+         (reduce merge {}))))
 
 (defn get-deployable [{:keys [rules descs]} config]
   (let [rules (sorted-rules rules)]

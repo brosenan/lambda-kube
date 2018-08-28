@@ -14,7 +14,7 @@
   * [NodePort Services](#nodeport-services)
 * [Dependency Injection](#dependency-injection)
   * [Describers and Descriptions](#describers-and-descriptions)
-* [Utility Functions](#utility-functions)
+* [Interacting with Kubernetes](#interacting-with-kubernetes)
 * [Under the Hood](#under-the-hood)
   * [Flattening Nested API Objects](#flattening-nested-api-objects)
 ```clojure
@@ -902,20 +902,22 @@ the labels.
 (defn module6 [$]
   (-> $
       (lk/desc (fn [obj]
-                 {:name (-> obj :metadata :name)}))
+                 (when (contains? #{"Pod" "Deployment"} (:kind obj))
+                   {:name (-> obj :metadata :name)})))
       (lk/desc (fn [obj]
-                 (when (= (:kind "Service"))
-                   {:port (-> obj :spec :ports first :port)})))
+                 (when (= (:kind obj) "Service")
+                   {:hostname (-> obj :metadata :name)})))
       (lk/desc (fn [obj]
-                 {:labels (-> obj :metadata :labels)}))
-      (lk/rule :first-pod []
-               (fn []
+                 (when (contains? #{"Pod" "Deployment"} (:kind obj))
+                   {:labels (-> obj :metadata :labels)})))
+      (lk/rule :dependency [:use-simple-pod]
+               (fn [use-simple-pod]
                  (lk/pod :my-first-pod {})))
-      (lk/rule :second-pod [:first-pod]
-               (fn [first-pod]
-                 (lk/pod :my-first-pod {:the-name (:name first-pod)
-                                        :the-port (:port first-pod)
-                                        :the-labels (:labels first-pod)})))))
+      (lk/rule :dependent [:dependency]
+               (fn [dep]
+                 (lk/pod :my-second-pod {:the-name (:name dep)
+                                         :the-hostname (:hostname dep)
+                                         :the-labels (:labels dep)})))))
 
 ```
 The module also defines two rules for two pods. The second pod
@@ -927,15 +929,47 @@ pod will be set so that the name will be there, but not the port.
 (fact
  (-> (lk/injector)
      (module6)
-     (lk/get-deployable {}))
+     (lk/get-deployable {:use-simple-pod true}))
  => [(lk/pod :my-first-pod {})
-     (lk/pod :my-first-pod {:the-name :my-first-pod
-                            :the-port nil
-                            :the-labels {}})])
-
+     (lk/pod :my-second-pod {:the-name :my-first-pod
+                             :the-hostname nil
+                             :the-labels {}})])
 
 ```
-# Utility Functions
+When an API object contains nested objects (`:$additional` fields),
+describer functions are applied to all nested objects.
+
+Consider for example an alternative rule that defines the above
+`:dependency`, and this time, uses `expose-cluster-ip` to attach a
+service.
+```clojure
+(defn module7 [$]
+  (-> $
+      (lk/rule :dependency [:use-depl-with-svc]
+               (fn [use-depl-with-svc]
+                 (-> (lk/pod :my-depl {})
+                     (lk/add-container :foo "some-image")
+                     (lk/deployment 3)
+                     (lk/expose-cluster-ip :my-svc (lk/port :foo 80 80)))))))
+
+```
+Now, if we use this module in conjunction with `module6`, and
+provide the configuration parameter that triggers our new
+definition, the `:dependent` pod should see the `:hostname`
+parameter contributed by the nested service.
+```clojure
+(fact
+ (-> (lk/injector)
+     (module6)
+     (module7)
+     (lk/get-deployable {:use-depl-with-svc true})
+     (last))
+ => (lk/pod :my-second-pod {:the-name :my-depl
+                            :the-hostname :my-svc
+                            :the-labels {}}))
+
+```
+# Interacting with Kubernetes
 
 All the above functions are pure functions that help build
 Kubernetes API objects for systems. The following functions help
@@ -947,9 +981,11 @@ acceptable by Kubernetes.
 ```clojure
 (fact
  (-> (lk/pod :nginx-deployment {:app :nginx})
-     (lk/add-container :nginx "nginx:1.7.9" {:ports [{:containerPort 80}]})
+     (lk/add-container :nginx "nginx:1.7.9")
      (lk/deployment 3)
-     (list)
+     (lk/expose-cluster-ip :nginx-svc (lk/port :nginx 80 80))
+     (lk/extract-additional)
+     ((fn [x] (cons x (-> x meta :additional))))
      (lk/to-yaml)) =>
  "apiVersion: apps/v1
 kind: Deployment
@@ -968,10 +1004,22 @@ spec:
         app: nginx
     spec:
       containers:
-      - ports:
-        - containerPort: 80
-        name: nginx
+      - name: nginx
         image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: nginx-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx
+  ports:
+  - port: 80
+    targetPort: 80
 ")
 
 ```
