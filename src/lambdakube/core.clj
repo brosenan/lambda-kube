@@ -182,9 +182,10 @@
    (expose-cluster-ip depl name portfunc {}))
   ([depl name portfunc attrs]
    (expose depl name portfunc (merge attrs {:type :ClusterIP})
-           (fn [svc src tgt]
-             (update svc :spec field-conj :ports {:port src
-                                                  :targetPort tgt})))))
+           (fn [svc podport svcport]
+             (update svc :spec field-conj :ports {:port svcport
+                                                  :name podport
+                                                  :targetPort podport})))))
 
 (defn expose-headless
   ([depl name portfunc]
@@ -194,12 +195,13 @@
 
 (defn expose-node-port [depl name portfunc]
   (expose depl name portfunc {:type :NodePort}
-          (fn [svc src tgt]
-            (let [ports {:port src}
-                  ports (if (nil? tgt)
+          (fn [svc podport svcport]
+            (let [ports {:targetPort podport
+                         :name podport}
+                  ports (if (nil? svcport)
                           ports
                           ;; else
-                          (assoc ports :nodePort tgt))]
+                          (assoc ports :nodePort svcport))]
               (update svc :spec field-conj :ports ports)))))
 
 (defn injector []
@@ -285,14 +287,14 @@
         (throw (Exception. (:err res)))))))
 
 (defn port
-  ([cont portname src-port]
-   (port cont portname src-port nil))
-  ([cont portname src-port tgt-port]
+  ([cont portname podport]
+   (port cont portname podport nil))
+  ([cont portname podport svcport]
    (fn [[pod svc edit-svc]]
      [(-> pod
-          (update-container cont field-conj :ports {:containerPort src-port
+          (update-container cont field-conj :ports {:containerPort podport
                                                     :name portname}))
       (-> svc
-          (edit-svc src-port tgt-port))
+          (edit-svc portname svcport))
       edit-svc])))
 
