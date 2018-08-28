@@ -125,15 +125,17 @@
                         cont))]
     (update-in pod [:spec :containers] #(map update-cont %))))
 
+(defn- mount-func [name mounts]
+  (apply comp (for [[cont path] mounts]
+                #(update-container % cont field-conj :volumeMounts
+                                   {:name name
+                                    :mountPath path}))))
+
 (defn add-volume [pod name spec mounts]
-  (let [mount-func (apply comp (for [[cont path] mounts]
-                                 #(update-container % cont field-conj :volumeMounts
-                                                    {:name name
-                                                     :mountPath path})))]
-    (-> pod
-        (update :spec field-conj :volumes (-> {:name name}
-                                              (merge spec)))
-        (mount-func))))
+  (-> pod
+      (update :spec field-conj :volumes (-> {:name name}
+                                            (merge spec)))
+      ((mount-func name mounts))))
 
 (defn add-files-to-container [pod cont unique base-path mounts]
   (let [relpathmap (into {} (for [[i [path val]] (map-indexed vector mounts)]
@@ -144,23 +146,14 @@
     (-> pod
         (field-conj :$additional (config-map unique relpathmap))
         (add-volume unique {:configMap {:name unique
-                                        :items items}} {})
-        (update-container cont field-conj :volumeMounts
-                          {:name unique
-                           :mountPath base-path}))))
+                                        :items items}}
+                    {cont base-path}))))
 
 (defn add-volume-claim-template [sset name spec mounts]
-  (let [add-mount (fn [cont]
-                    (if (contains? mounts (:name cont))
-                      (let [new-mount {:mountPath (mounts (:name cont))
-                                       :name name}]
-                        (field-conj cont :volumeMounts new-mount))
-                      ;; else
-                      cont))]
-    (-> sset
-        (update-in [:spec :volumeClaimTemplates] conj {:metadata {:name name}
-                                                       :spec spec})
-        (update-in [:spec :template :spec :containers] #(map add-mount %)))))
+  (-> sset
+      (update :spec field-conj :volumeClaimTemplates {:metadata {:name name}
+                                                      :spec spec})
+      (update-template (mount-func name mounts))))
 
 (defn update-template [ctrl f & args]
   (apply update-in ctrl [:spec :template] f args))
