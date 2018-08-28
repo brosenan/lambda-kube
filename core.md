@@ -1,7 +1,7 @@
 * [Basic API Object Functions](#basic-api-object-functions)
   * [Pod](#pod)
   * [Deployment](#deployment)
-* [Stateful Set](#stateful-set)
+  * [Stateful Set](#stateful-set)
   * [Job](#job)
   * [Config Map](#config-map)
 * [Modifier Functions](#modifier-functions)
@@ -80,7 +80,7 @@ and removes the name from the template.
                 :image "some-image"}]}}}})
 
 ```
-# Stateful Set
+## Stateful Set
 
 The `stateful-set` function wraps the given pod with a Kubernetes
 stateful set.

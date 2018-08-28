@@ -52,7 +52,7 @@
               [{:name :bar
                 :image "some-image"}]}}}})
 
-;; # Stateful Set
+;; ## Stateful Set
 
 ;; The `stateful-set` function wraps the given pod with a Kubernetes
 ;; stateful set.
