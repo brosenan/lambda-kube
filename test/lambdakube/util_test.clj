@@ -100,3 +100,79 @@
         (lk/add-init-container :wait-for-some-service-web
                                "busybox"
                                {:command ["nc" "-z" :some-service "80"]})))
+
+
+;; # Testing
+
+;; Lambda-Kube brings software to the cluster level. This raises an
+;; important question: _How do we test cluster-level software_? In
+;; this section we try to answer this question.
+
+;; ## What are we Testing?
+
+;; The first thing we would like to test at the cluster level, we
+;; would like to test _integrations_ between components. We trust that
+;; each component (e.g., microservice) is tested by itself, but at the
+;; cluster level we would like to see that the assumption one
+;; microservice makes on all others are sound.
+
+;; However, this is not enough. As we moved the cluster level to
+;; become software by itself, we need to test that software. We need
+;; to see that the Kubernetes objects we create are indeed valid
+;; (Lambda-Kube does not replicate Kubernetes's validation logic, so
+;; it is possible to create illegal Kubernetes objects). Moreover, we
+;; would like to see that the way we configured these objects provides
+;; the correct functionality. For example, we would like to know we
+;; have exposed the correct ports, that we wait for the right
+;; services, etc.
+
+;; ## Test Support in Lambda-Kube
+
+;; Lambda-Kube's testing support consists of two parts. A `test`
+;; function, used to register tests from within
+;; [modules](core.md#dependency-injection), and a `run-tests`
+;; function, which uses `kubectl` to run all tests, each within its
+;; own namespace, and return the results.
+
+;; ## Defining Tests
+
+;; The `test` function adds a test definition to the given
+;; injector. It takes the following paramters:
+;; 1. An injector (named `$` by convention).
+;; 2. A name for the test (a keyword, needs to be unique within the same injector).
+;; 3. A configuration map for building the system under test.
+;; 4. A list of dependencies (as in a `rule`).
+;; 5. A function which takes the dependencies as arguments and constructs a pod for running the test.
+;; `test` returns an injector with a new test and a new rule.
+(fact
+ (let [$ (-> (lk/injector)
+             (lku/test :my-test
+                       {:some :config}
+                       [:foo :bar]
+                       (fn [foo bar]
+                         (lk/pod :my-own-name-for-this-pod
+                                 {:foo foo
+                                  :bar bar}))))]
+   (:tests $) => {:my-test {:some :config}}
+   (let [[[func deps res]] (:rules $)]
+     deps => [:foo :bar]
+     res => :my-test
+     ;; The pod name is overriden with :test,
+     ;; and is wrapped with a job.
+     (func :FOO :BAR) => (-> (lk/pod :test {:foo :FOO
+                                            :bar :BAR})
+                             (lk/job :Never)))))
+
+;; ## Running Tests
+
+;; The function `run-test` takes an injector, a name of a test
+;; (keyword), and a prefix (string) as parameters, and runs a single
+;; test in its own namespace.
+
+;; `run-test` makes the following calls to `kubectl`:
+;; 1. `kubectl create ns` with the namespace name, consisting of the given prefix and the test name, separated by a dash.
+;; 2. `kubectl -n <the namespace> create -f` with the `.yaml` files produced from applying the test configuration to the injector.
+;; 3. Polling the job for completion: `kubectl -n <the namespace> get job test -o json`
+;; 4. Upon completion: `kubectl -n <the namespace> logs -ljob-name=test` to collect the test logs.
+;; 5. When successful: `kubectl delete ns <the namespace>`.
+;; Note that we do not automatically remove failed namespaces, to allow investigation.

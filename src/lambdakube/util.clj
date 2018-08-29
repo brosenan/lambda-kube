@@ -22,3 +22,13 @@
     (-> pod
         (lk/add-init-container cont "busybox"
                                {:command ["nc" "-z" hostname (str (ports portname))]}))))
+
+
+(defn test [$ name config deps func]
+  (let [func' (fn [& args]
+                (-> (apply func args)
+                    (update :metadata assoc :name :test)
+                    (lk/job :Never)))]
+    (-> $
+        (update :tests assoc name config)
+        (lk/rule name deps func'))))

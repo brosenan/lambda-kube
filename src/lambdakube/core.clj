@@ -209,8 +209,6 @@
 (defn rule [$ res deps func]
   (update $ :rules conj [func deps res]))
 
-(defn get-resource [$ res])
-
 (defn- append [list obj]
   (if (sequential? obj)
     (concat list obj)
