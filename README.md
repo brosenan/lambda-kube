@@ -51,9 +51,10 @@ Define a `-main` function.
 (defn -main []
   (-> (lk/injector)
       module
+      lk/standard-descs
       (lk/get-deployable config)
       lk/to-yaml
-      (lk/kube-apply (io/file "my-app.yaml"))))
+      (lk/kube-apply (io/file "guestbook.yaml"))))
 ```
 
 Run it:
