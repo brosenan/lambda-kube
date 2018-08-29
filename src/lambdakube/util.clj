@@ -21,4 +21,4 @@
         cont (keyword (str "wait-for-" (name hostname) "-" (name portname)))]
     (-> pod
         (lk/add-init-container cont "busybox"
-                               {:command ["nc" "-z" hostname (ports portname)]}))))
+                               {:command ["nc" "-z" hostname (str (ports portname))]}))))
