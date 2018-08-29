@@ -1,4 +1,4 @@
-(defproject brosenan/lambdakube "0.4.1"
+(defproject brosenan/lambdakube "0.4.2-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
