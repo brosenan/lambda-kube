@@ -12,4 +12,13 @@
         (lk/add-files-to-container cont (keyword (str (name cont) "-clj")) "/src"
                                    {"project.clj" proj
                                     "src/main.clj" code})
-        (lk/update-container cont assoc :command ["sh" "-c" "cp -r /src /work && cd /work && lein run"]))))
+        (lk/update-container cont assoc :command
+                             ["sh" "-c" "cp -r /src /work && cd /work && lein run"]))))
+
+
+(defn wait-for-service-port [pod dep portname]
+  (let [{:keys [hostname ports]} dep
+        cont (keyword (str "wait-for-" (name hostname) "-" (name portname)))]
+    (-> pod
+        (lk/add-init-container cont "busybox"
+                               {:command ["nc" "-z" hostname (ports portname)]}))))

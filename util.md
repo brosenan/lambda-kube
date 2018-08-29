@@ -1,4 +1,5 @@
 * [Clojure Nanoservices](#clojure-nanoservices)
+* [Startup Ordering](#startup-ordering)
 ```clojure
 (ns lambdakube.util-test
   (:require [midje.sweet :refer :all]
@@ -60,16 +61,53 @@ nanoservice's code.
           (lk/update-container :bar assoc :command
                                ["sh" "-c" "cp -r /src /work && cd /work && lein run"]))))
 
-'(-> (lk/pod :foo {:app :foo})
-    (lku/add-clj-container :bar '[[org.clojure/clojure "1.9.0"]]
-                           '[(ns main)
-                             (defn -main []
-                               (println "Hello, World"))])
-    (lk/job :Never)
-    (lk/extract-additional)
-    ((fn [x] (cons x (-> x meta :additional))))
-    (lk/to-yaml)
-    (println))
+```
+# Startup Ordering
 
+Often, when one pod depends some service, we wish for it to waits
+until the service starts and opens its sockets. Otherwise, the
+dependent pod may try to connect to the service and fail. It will
+be retried until the service is up, but Kubernetes will apply
+backoff delays, which will make startup time longer than necessary,
+and the logs dirtier than necessary.
+
+To facilitate a clean startup, the `wait-for-service-port` function
+adds an init container to a given pod, to make sure the pod waits
+for the service to be available before starting the main
+container(s). In addition to the pod to be augmented, it takes a
+dependency description of a service, and the name of a port to wait
+for.
+```clojure
+(defn module1 [$]
+  (-> $
+      ;; A dependency service
+      (lk/rule :some-service []
+               (fn []
+                 (-> (lk/pod :some-service {:foo :bar})
+                     (lk/add-container :quux "some-image")
+                     (lk/deployment 3)
+                     (lk/expose-cluster-ip :some-service
+                                           (lk/port :quux :web 80 80)))))
+      ;; A dependent pod
+      (lk/rule :some-pod [:some-service]
+               (fn [some-service]
+                 (-> (lk/pod :some-pod {:foo :baz})
+                     (lku/wait-for-service-port some-service :web))))))
+
+```
+It creates a [BusyBox](https://busybox.net/) container, which
+uses [NetCat](https://en.wikipedia.org/wiki/Netcat) to poll the
+necessary port.
+```clojure
+(fact
+ (-> (lk/injector)
+     (lk/standard-descs)
+     (module1)
+     (lk/get-deployable {})
+     (last))
+ => (-> (lk/pod :some-pod {:foo :baz})
+        (lk/add-init-container :wait-for-some-service-web
+                               "busybox"
+                               {:command ["nc" "-z" :some-service 80]})))
 ```
 

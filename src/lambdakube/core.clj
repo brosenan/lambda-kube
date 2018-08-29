@@ -149,6 +149,9 @@
                                         :items items}}
                     {cont base-path}))))
 
+(defn update-template [ctrl f & args]
+  (apply update-in ctrl [:spec :template] f args))
+
 (defn add-volume-claim-template [sset name spec mounts]
   (-> sset
       (update :spec field-conj :volumeClaimTemplates {:metadata {:name name}
@@ -158,9 +161,6 @@
 (defn add-annotation [obj key val]
   (-> obj
       (update-in [:metadata :annotations] assoc key val)))
-
-(defn update-template [ctrl f & args]
-  (apply update-in ctrl [:spec :template] f args))
 
 (defn expose [depl name portfunc attrs editfunc]
   (let [pod (-> depl :spec :template)
