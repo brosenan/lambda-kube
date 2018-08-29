@@ -31,6 +31,9 @@ Define a module function, defining the different parts of the system.
                      ;; We load three files from resources and mount them to the container
                      (lk/add-files-to-container :php-redis :new-gb-fe-files "/var/www/html"
                                                 (map-resources ["index.html" "controllers.js" "guestbook.php"]))
+                     ;; Wait for the master and slave to come up
+                     (lku/wait-for-service-port master :redis)
+                     (lku/wait-for-service-port slave :redis)
                      ;; Then we wrap the pod with a deployment, specifying the number of replicas.
                      (lk/deployment num-replicas)
                      ;; Finally, we expose port 80 using a NodePort service.
