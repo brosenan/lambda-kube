@@ -4,12 +4,15 @@
   * [What are we Testing?](#what-are-we-testing?)
   * [Test Support in Lambda-Kube](#test-support-in-lambda-kube)
   * [Defining Tests](#defining-tests)
-  * [Running Tests](#running-tests)
+  * [Running a Single Test](#running-a-single-test)
+  * [Running All Tests](#running-all-tests)
 ```clojure
 (ns lambdakube.util-test
   (:require [midje.sweet :refer :all]
             [lambdakube.core :as lk]
-            [lambdakube.util :as lku]))
+            [lambdakube.util :as lku]
+            [clojure.data.json :as json]
+            [clojure.java.shell :as sh]))
 
 ```
 # Clojure Nanoservices
@@ -86,9 +89,9 @@ for.
 (defn module1 [$]
   (-> $
       ;; A dependency service
-      (lk/rule :some-service []
-               (fn []
-                 (-> (lk/pod :some-service {:foo :bar})
+      (lk/rule :some-service [:some-dep]
+               (fn [some-dep]
+                 (-> (lk/pod :some-service {:foo some-dep})
                      (lk/add-container :quux "some-image")
                      (lk/deployment 3)
                      (lk/expose-cluster-ip :some-service
@@ -108,7 +111,7 @@ necessary port.
  (-> (lk/injector)
      (lk/standard-descs)
      (module1)
-     (lk/get-deployable {})
+     (lk/get-deployable {:some-dep :bar})
      (last))
  => (-> (lk/pod :some-pod {:foo :baz})
         (lk/add-init-container :wait-for-some-service-web
@@ -173,23 +176,130 @@ injector. It takes the following paramters:
    (let [[[func deps res]] (:rules $)]
      deps => [:foo :bar]
      res => :my-test
-     ;; The pod name is overriden with :test,
-     ;; and is wrapped with a job.
+     ;; The pod is wrapped with a job named `:test`
      (func :FOO :BAR) => (-> (lk/pod :test {:foo :FOO
                                             :bar :BAR})
                              (lk/job :Never)))))
 
 ```
-## Running Tests
+## Running a Single Test
 
 The function `run-test` takes an injector, a name of a test
 (keyword), and a prefix (string) as parameters, and runs a single
 test in its own namespace.
 
-`run-test` makes the following calls to `kubectl`:
-1. `kubectl create ns` with the namespace name, consisting of the given prefix and the test name, separated by a dash.
-2. `kubectl -n <the namespace> create -f` with the `.yaml` files produced from applying the test configuration to the injector.
-3. Polling the job for completion: `kubectl -n <the namespace> get job test -o json`
-4. Upon completion: `kubectl -n <the namespace> logs -ljob-name=test` to collect the test logs.
-5. When successful: `kubectl delete ns <the namespace>`.
-Note that we do not automatically remove failed namespaces, to allow investigation.
+Consider for example `module2`, which defines a test for the
+service defined in `module1`.
+```clojure
+(defn module2 [$]
+  (-> $
+      (lku/test :my-test {:some-dep :goo}
+                [:some-service]
+                (fn [some-service]
+                  (-> (lk/pod :this-name-does-not-matter {})
+                      (lku/add-clj-container :cont
+                                             '[[org.clojure/clojure "1.9.0"]]
+                                             '[(ns main)
+                                               (defn -main []
+                                                 (println "Hello, World"))])
+                      (lku/wait-for-service-port some-service :web))))))
+
+```
+Now, to execute this test we need to create an injector and
+register both modules. Then we call `run-test` on this injector.
+```clojure
+(fact
+ (let [$ (-> (lk/injector)
+             (module1)
+             (module2)
+             (lk/standard-descs))]
+   (lku/run-test $ :my-test "foo") => {:log "this is the log"
+                                       :status :pass}
+   (provided
+    ;; Creation of the namespace
+    (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 0}
+    ;; Creation of the YAML file for the test setup
+    (lk/get-deployable $ {:some-dep :goo}) => ..deployable..
+    (lk/to-yaml ..deployable..) => ..yaml..
+    (spit "foo-my-test.yaml" ..yaml..) => nil
+    ;; Apply the YAML within the namespace
+    (sh/sh "kubectl" "-n" "foo-my-test" "apply" "-f" "foo-my-test.yaml") => {:exit 0}
+    ;; Polling for the job status. In this scenario, the job is active
+    ;; for two iterations, and then becomes completed.
+    (sh/sh "kubectl" "-n" "foo-my-test" "get" "job" "test" "-o" "json")
+    =streams=> [{:exit 0
+                 :out (json/write-str {:status {:active 1}})}
+                {:exit 0
+                 :out (json/write-str {:status {:active 1}})}
+                {:exit 0
+                 :out (json/write-str {:status {:succeeded 1}})}] :times 3
+    ;; Collect the logs
+    (sh/sh "kubectl" "-n" "foo-my-test" "logs" "-ljob-name=test")
+    => {:exit 0
+        :out "this is the log"}
+    ;; Delete the namespace
+    (sh/sh "kubectl" "delete" "ns" "foo-my-test") => {:exit 0})))
+
+```
+If `kubectl` returns a non-zero exit code, an exception is thrown,
+taking the content of the standard error as the exception message.
+```clojure
+(fact
+ (let [$ (-> (lk/injector)
+             (module1)
+             (module2)
+             (lk/standard-descs))]
+   (lku/run-test $ :my-test "foo") => (throws "This is an error")
+   (provided
+    (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 22
+                                                      :err "This is an error"})))
+
+```
+If the job fails, we return a `:fail` status
+```clojure
+(fact
+ (let [$ (-> (lk/injector)
+             (module1)
+             (module2)
+             (lk/standard-descs))]
+   (lku/run-test $ :my-test "foo") => {:log "this is the log"
+                                       :status :fail}
+   (provided
+    (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 0}
+    (lk/get-deployable $ {:some-dep :goo}) => ..deployable..
+    (lk/to-yaml ..deployable..) => ..yaml..
+    (spit "foo-my-test.yaml" ..yaml..) => nil
+    (sh/sh "kubectl" "-n" "foo-my-test" "apply" "-f" "foo-my-test.yaml") => {:exit 0}
+    ;; After the job is not active anymore, it fails.
+    (sh/sh "kubectl" "-n" "foo-my-test" "get" "job" "test" "-o" "json")
+    =streams=> [{:exit 0
+                 :out (json/write-str {:status {:active 1}})}
+                {:exit 0
+                 :out (json/write-str {:status {:active 1}})}
+                {:exit 0
+                 :out (json/write-str {:status {:failed 1}})}] :times 3
+    (sh/sh "kubectl" "-n" "foo-my-test" "logs" "-ljob-name=test")
+    => {:exit 0
+        :out "this is the log"}
+    ;; If the test fails, we do not delete the namespace to allow
+    ;; investigation of the root cause.    
+    (sh/sh "kubectl" "delete" "ns" "foo-my-test") => {:exit 0} :times 0)))
+
+```
+## Running All Tests
+
+The function `run-tests` runs some or all registered tests. It
+takes an injector and a prefix, and iterates over all the tests it
+contains. It then calls `run-test` on each one.
+```clojure
+(fact
+ (let [$ {:tests {:foo {:foo :config}
+                  :bar {:bar :config}}}]
+   (lku/run-tests $ ..prefix..) => {:foo ..foores..
+                                    :bar ..barres..}
+   (provided
+    (lku/run-test $ :foo ..prefix..) => ..foores..
+    (lku/run-test $ :bar ..prefix..) => ..barres..)))
+
+```
+An optional third parameter is a predicate on the configuration.
