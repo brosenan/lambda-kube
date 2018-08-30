@@ -228,6 +228,7 @@
              (lk/standard-descs))]
    (lku/run-test $ :my-test "foo") => (throws "This is an error")
    (provided
+    (spit "foo-my-test.yaml" irrelevant) => nil
     (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 22
                                                       :err "This is an error"})))
 
