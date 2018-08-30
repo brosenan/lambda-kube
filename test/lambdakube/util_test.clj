@@ -275,3 +275,11 @@
     (lku/run-test $ :bar ..prefix..) => ..barres..)))
 
 ;; An optional third parameter is a predicate on the configuration.
+(fact
+ (let [$ {:tests {:foo {:foo :config}
+                  :bar {:bar :config}}}]
+   (lku/run-tests $ ..prefix.. #(contains? % :foo)) => {:foo ..foores..}
+   (provided
+    (lku/run-test $ :foo ..prefix..) => ..foores..)))
+
+

@@ -68,6 +68,12 @@
       {:log log
        :status status})))
 
-(defn run-tests [$ prefix]
-  (into {} (for [[k v] (:tests $)]
-             [k (run-test $ k prefix)])))
+(defn run-tests
+  ([$ prefix]
+   (run-tests $ prefix (constantly true)))
+  ([$ prefix pred]
+   (->> (:tests $)
+        (filter (comp pred second))
+        (map (fn [[k v]]
+               [k (run-test $ k prefix)]))
+        (into {}))))

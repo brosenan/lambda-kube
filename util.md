@@ -303,3 +303,14 @@ contains. It then calls `run-test` on each one.
 
 ```
 An optional third parameter is a predicate on the configuration.
+```clojure
+(fact
+ (let [$ {:tests {:foo {:foo :config}
+                  :bar {:bar :config}}}]
+   (lku/run-tests $ ..prefix.. #(contains? % :foo)) => {:foo ..foores..}
+   (provided
+    (lku/run-test $ :foo ..prefix..) => ..foores..)))
+
+
+```
+
