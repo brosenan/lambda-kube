@@ -41,13 +41,18 @@
         (throw (Exception. (:err ret))))
       (:out ret)))
 
+(defn log [msg]
+  (println msg))
+
 (defn run-test [$ test prefix]
   (let [kns (str prefix "-" (name test))
         depl (lk/get-deployable $ ((:tests $) test))
         yaml (lk/to-yaml depl)
         filename (str kns ".yaml")]
     (spit filename yaml)
+    (log (str "Creating namespace " kns))
     (kubectl "create" "ns" kns)
+    (log (str "Deploying test " test))
     (kubectl "-n" kns "apply" "-f" filename)
     (let [status (loop []
                    (let [out (kubectl "-n" kns "get" "job" "test" "-o" "json")
@@ -62,10 +67,12 @@
                          :pass
                          ;; else
                          :fail))))
-          log (kubectl "-n" kns "logs" "-ljob-name=test")]
+          joblog (kubectl "-n" kns "logs" "-ljob-name=test")]
+      (log (str "Test " test " completed. Status: " status))
       (when (= status :pass)
+        (log (str "Deleting namespace " kns))
         (kubectl "delete" "ns" kns))
-      {:log log
+      {:log joblog
        :status status})))
 
 (defn run-tests
@@ -77,3 +84,4 @@
         (map (fn [[k v]]
                [k (run-test $ k prefix)]))
         (into {}))))
+

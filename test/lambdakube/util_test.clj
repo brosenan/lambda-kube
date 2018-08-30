@@ -196,12 +196,14 @@
                                        :status :pass}
    (provided
     ;; Creation of the namespace
+    (lku/log "Creating namespace foo-my-test") => nil
     (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 0}
     ;; Creation of the YAML file for the test setup
     (lk/get-deployable $ {:some-dep :goo}) => ..deployable..
     (lk/to-yaml ..deployable..) => ..yaml..
     (spit "foo-my-test.yaml" ..yaml..) => nil
     ;; Apply the YAML within the namespace
+    (lku/log "Deploying test :my-test") => nil
     (sh/sh "kubectl" "-n" "foo-my-test" "apply" "-f" "foo-my-test.yaml") => {:exit 0}
     ;; Polling for the job status. In this scenario, the job is active
     ;; for two iterations, and then becomes completed.
@@ -216,7 +218,9 @@
     (sh/sh "kubectl" "-n" "foo-my-test" "logs" "-ljob-name=test")
     => {:exit 0
         :out "this is the log"}
+    (lku/log "Test :my-test completed. Status: :pass") => nil
     ;; Delete the namespace
+    (lku/log "Deleting namespace foo-my-test") => nil
     (sh/sh "kubectl" "delete" "ns" "foo-my-test") => {:exit 0})))
 
 ;; If `kubectl` returns a non-zero exit code, an exception is thrown,
@@ -229,6 +233,7 @@
    (lku/run-test $ :my-test "foo") => (throws "This is an error")
    (provided
     (spit "foo-my-test.yaml" irrelevant) => nil
+    (lku/log "Creating namespace foo-my-test") => nil
     (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 22
                                                       :err "This is an error"})))
 
@@ -241,10 +246,12 @@
    (lku/run-test $ :my-test "foo") => {:log "this is the log"
                                        :status :fail}
    (provided
+    (lku/log "Creating namespace foo-my-test") => nil
     (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 0}
     (lk/get-deployable $ {:some-dep :goo}) => ..deployable..
     (lk/to-yaml ..deployable..) => ..yaml..
     (spit "foo-my-test.yaml" ..yaml..) => nil
+    (lku/log "Deploying test :my-test") => nil
     (sh/sh "kubectl" "-n" "foo-my-test" "apply" "-f" "foo-my-test.yaml") => {:exit 0}
     ;; After the job is not active anymore, it fails.
     (sh/sh "kubectl" "-n" "foo-my-test" "get" "job" "test" "-o" "json")
@@ -257,6 +264,7 @@
     (sh/sh "kubectl" "-n" "foo-my-test" "logs" "-ljob-name=test")
     => {:exit 0
         :out "this is the log"}
+    (lku/log "Test :my-test completed. Status: :fail") => nil
     ;; If the test fails, we do not delete the namespace to allow
     ;; investigation of the root cause.    
     (sh/sh "kubectl" "delete" "ns" "foo-my-test") => {:exit 0} :times 0)))
