@@ -5,6 +5,7 @@
             [lambdakube.util :as lku]
             [lambdakube.util-test :as lkut]
             [clojure.data.json :as json]
+            [clojure.data.xml :as xml]
             [clojure.java.shell :as sh]))
 
 ;; Lambda-Kube brings software to the cluster level. This raises an
@@ -198,3 +199,56 @@
     (lkt/run-test $ :foo ..prefix..) => ..foores..)))
 
 
+;; # Writing Test Results
+
+;; To facilitate integration with external CI tools, Lambda-Kube's
+;; testing framework is able to produce [XUnit-like XML result
+;; files](https://xunit.github.io/docs/format-xml-v2).
+
+;; The function `to-xunit` takes a results map, as returned by
+;; `run-tests`, and generates an XML file, to be written to the given
+;; file name.
+(fact
+ (let [res {:foo {:log "Log for foo"
+                  :status :pass}
+            :bar {:log "Log for bar"
+                  :status :fail}}]
+   (lkt/to-xunit res "res.xml") => nil
+   (provided
+    (xml/sexp-as-element [:assemblies
+                          [:assembly {:name "lambda-kube tests"
+                                      :passed 1
+                                      :failed 1}
+                           [:collection {:name "tests"
+                                         :passed 1
+                                         :failed 1}
+                            [:test {:name "foo"
+                                    :result "Pass"}]
+                            [:test {:name "bar"
+                                    :result "Fail"}]]]]) => ..xml..
+    (xml/indent-str ..xml..) => ..str..
+    (spit "res.xml" ..str..) => nil)))
+
+;; # Top-Level Function
+
+;; `kube-tests` takes an injector, a prefix and (optionally) a
+;; predicate function, and does the following:
+;; 1. Calls `run-tests` to execute all registered tests (filtered by the predicate function if provided).
+;; 2. Calls `to-xunit` with the result, to write a results file named `<prefix>-results.xml`.
+;; 3. Returns `true` if all tests have passed, or `false` otherwise.
+(fact
+ (let [$ {:tests {:foo {:foo :config}
+                  :bar {:bar :config}}}]
+   (lkt/kube-tests $ "prefix") => false
+   (provided
+    (lkt/run-tests $ "prefix" (constantly true))
+    => {:foo {:status :pass}
+        :bar {:status :fail}}
+    (lkt/to-xunit {:foo {:status :pass}
+                   :bar {:status :fail}} "prefix-results.xml") => nil)
+
+   (lkt/kube-tests $ "prefix" ..some-filter..) => true
+   (provided
+    (lkt/run-tests $ "prefix" ..some-filter..)
+    => {:foo {:status :pass}}
+    (lkt/to-xunit {:foo {:status :pass}} "prefix-results.xml") => nil)))

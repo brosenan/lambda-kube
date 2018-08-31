@@ -71,6 +71,7 @@ A complete example can be found [here](https://github.com/brosenan/lambdakube-ex
 # Documentation
 * [Core Library](core.md)
 * [Utility Functions](util.md)
+* [Test Framework](testing.md)
 
 # Rationale
 Kubernetes is a really great tool, which transforms the task of

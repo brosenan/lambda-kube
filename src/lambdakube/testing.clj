@@ -1,7 +1,8 @@
 (ns lambdakube.testing
   (:require [lambdakube.core :as lk]
             [clojure.java.shell :as sh]
-            [clojure.data.json :as json]))
+            [clojure.data.json :as json]
+            [clojure.data.xml :as xml]))
 
 (defn test [$ name config deps func]
   (let [func' (fn [& args]
@@ -63,3 +64,37 @@
         (into {}))))
 
 
+(defn to-xunit [res filename]
+  (let [passed (->> res
+                    (map second)
+                    (filter #(= (:status %) :pass))
+                    (count))
+        failed (->> res
+                    (map second)
+                    (filter #(= (:status %) :fail))
+                    (count))]
+    (->> (xml/sexp-as-element [:assemblies
+                               [:assembly {:name "lambda-kube tests"
+                                           :passed passed
+                                           :failed failed}
+                                (vec (concat [:collection {:name "tests"
+                                                           :passed passed
+                                                           :failed failed}]
+                                             (for [[k v] res]
+                                               [:test {:name (name k)
+                                                       :result (if (= (:status v) :pass)
+                                                                 "Pass"
+                                                                 ;; else
+                                                                 "Fail")}])))]])
+         (xml/indent-str)
+         (spit filename)))
+  nil)
+
+(defn kube-tests
+  ([$ prefix]
+   (kube-tests $ prefix (constantly true))
+   false)
+  ([$ prefix pred]
+   (let [res (run-tests $ prefix pred)]
+     (to-xunit res (str prefix "-results.xml"))
+     (every? #(= (-> % second :status) :pass) res))))

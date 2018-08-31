@@ -97,7 +97,7 @@
 
 ;; One of the most important uses of Clojure nanoservices is in
 ;; testing, e.g., in conjunction with our [testing
-;; framework](#testing). To facilitate this, we provide two functions
+;; framework](testing.md). To facilitate this, we provide two functions
 ;; to help use two Clojure test frameworks.
 
 ;; `add-clj-test-container` adds a container based on
