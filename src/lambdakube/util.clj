@@ -35,7 +35,7 @@
   (let [func' (fn [& args]
                 (-> (apply func args)
                     (update :metadata assoc :name :test)
-                    (lk/job :Never)))]
+                    (lk/job :Never {:backoffLimit 0})))]
     (-> $
         (update :tests assoc name config)
         (lk/rule name deps func'))))
@@ -90,3 +90,8 @@
                [k (run-test $ k prefix)]))
         (into {}))))
 
+
+(defn add-clj-test-container [pod cont deps exprs]
+  (add-clj-container pod cont deps exprs
+                     :source-file "test/main_test.clj"
+                     :lein "test"))

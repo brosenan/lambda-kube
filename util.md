@@ -1,4 +1,5 @@
 * [Clojure Nanoservices](#clojure-nanoservices)
+  * [Clojure Test Containers](#clojure-test-containers)
 * [Startup Ordering](#startup-ordering)
 * [Testing](#testing)
   * [What are we Testing?](#what-are-we-testing?)
@@ -105,6 +106,52 @@ map). `:lein` contains to the `lein` command (defaults to `run`).
                                       "src/foo.clj" code})
           (lk/update-container :bar assoc :command
                                ["sh" "-c" "cp -r /src /work && cd /work && lein trampoline run"]))))
+
+```
+## Clojure Test Containers
+
+One of the most important uses of Clojure nanoservices is in
+testing, e.g., in conjunction with our [testing
+framework](#testing). To facilitate this, we provide two functions
+to help use two Clojure test frameworks.
+
+`add-clj-test-container` adds a container based on
+`clojure.test`. Like `add-clj-container`, it takes a pod, a name
+for the new container, a vector of dependencies, and a vector of
+s-expressions, which in its case should include `testing`
+expressions. The `ns` should be `main-test`.
+```clojure
+(fact
+ (-> (lk/pod :foo {:tests :foo})
+     (lku/add-clj-test-container :test
+                                 '[[org.clojure/clojure "1.9.0"]]
+                                 '[(ns main-test
+                                     (:require [clojure.test :refer :all]))
+                                   (deftest one-equals-two
+                                     (is (= 1 2)))]))
+ => (-> (lk/pod :foo {:tests :foo})
+        (lku/add-clj-container :test
+                               '[[org.clojure/clojure "1.9.0"]]
+                               '[(ns main-test
+                                   (:require [clojure.test :refer :all]))
+                                   (deftest one-equals-two
+                                     (is (= 1 2)))]
+                               :source-file "test/main_test.clj"
+                               :lein "test")))
+
+
+'(-> (lk/pod :foo {:tests :foo})
+     (lku/add-clj-test-container :test
+                                 '[[org.clojure/clojure "1.9.0"]]
+                                 '[(ns main-test
+                                     (:require [clojure.test :refer :all]))
+                                   (deftest one-equals-two
+                                     (is (= 1 2)))])
+     (lk/job :Never {:backoffLimit 0})
+     (lk/extract-additional)
+     ((fn [x] (cons x (-> x meta :additional))))
+     (lk/to-yaml)
+     (println))
 
 ```
 # Startup Ordering
@@ -216,7 +263,12 @@ injector. It takes the following paramters:
      ;; The pod is wrapped with a job named `:test`
      (func :FOO :BAR) => (-> (lk/pod :test {:foo :FOO
                                             :bar :BAR})
-                             (lk/job :Never)))))
+                             ;; We wrap the given pod with a job, and
+                             ;; make sure it never restarts on
+                             ;; failures. This applies both to the pod
+                             ;; restarting itself, and the job
+                             ;; creating a new pod.
+                             (lk/job :Never {:backoffLimit 0})))))
 
 ```
 ## Running a Single Test

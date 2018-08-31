@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: foo
+  labels:
+    tests: foo
+spec:
+  template:
+    metadata:
+      labels:
+        tests: foo
+    spec:
+      containers:
+      - name: test
+        image: clojure:lein-2.8.1
+        volumeMounts:
+        - name: test-clj
+          mountPath: /src
+        command:
+        - sh
+        - -c
+        - cp -r /src /work && cd /work && lein test
+      volumes:
+      - name: test-clj
+        configMap:
+          name: test-clj
+          items:
+          - key: c0
+            path: project.clj
+          - key: c1
+            path: test/main_test.clj
+      restartPolicy: Never
+  backoffLimit: 0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-clj
+data:
+  c0: (defproject myproj "0.0.1-SNAPSHOT" :dependencies [[org.clojure/clojure "1.9.0"]]
+    :main main)
+  c1: |-
+    (ns main-test (:require [clojure.test :refer :all]))
+    (deftest one-equals-two (is (= 1 2)))
