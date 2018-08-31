@@ -4,18 +4,23 @@
             [clojure.java.shell :as sh]
             [clojure.data.json :as json]))
 
-(defn add-clj-container [pod cont deps code]
-  (let [proj (pr-str `(~'defproject ~'myproj "0.0.1-SNAPSHOT"
-                       :dependencies ~deps
-                       :main ~'main))
+(defn add-clj-container [pod cont deps code & {:keys [source-file proj lein]
+                                               :or {source-file "src/main.clj"
+                                                    proj {}
+                                                    lein "run"}}]
+  (let [projmap (-> {:dependencies deps
+                     :main 'main}
+                    (merge proj))
+        proj (pr-str (concat ['defproject 'myproj "0.0.1-SNAPSHOT"]
+                             (mapcat identity projmap)))
         code (str/join "\n" (map pr-str code))]
     (-> pod
         (lk/add-container cont "clojure:lein-2.8.1")
         (lk/add-files-to-container cont (keyword (str (name cont) "-clj")) "/src"
                                    {"project.clj" proj
-                                    "src/main.clj" code})
+                                    source-file code})
         (lk/update-container cont assoc :command
-                             ["sh" "-c" "cp -r /src /work && cd /work && lein run"]))))
+                             ["sh" "-c" (str "cp -r /src /work && cd /work && lein " lein)]))))
 
 
 (defn wait-for-service-port [pod dep portname]

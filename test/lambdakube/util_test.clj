@@ -58,6 +58,41 @@
           (lk/update-container :bar assoc :command
                                ["sh" "-c" "cp -r /src /work && cd /work && lein run"]))))
 
+;; `add-clj-container` takes optional keyword parameters to further
+;; customize the end result. `:source-file` determines the souce file
+;; to be used (defaults to `src/main.clj`). It needs to be coordinated
+;; with the name given to the `ns` macro. `:proj` takes a map to be
+;; merged to the `project.clj` definition (defaults to an empty
+;; map). `:lein` contains to the `lein` command (defaults to `run`).
+(fact
+ (-> (lk/pod :foo {:app :foo})
+     (lku/add-clj-container :bar
+                            '[[org.clojure/clojure "1.9.0"]
+                              [aysylu/loom "1.0.1"]]
+                            '[(ns foo
+                                (:require [clojure.string :as str]))
+                              (defn -main []
+                                (println "Hello, World"))]
+                            :source-file "src/foo.clj"
+                            :proj {:main 'foo}
+                            :lein "trampoline run"))
+ => (let [proj (pr-str '(defproject myproj "0.0.1-SNAPSHOT"
+                          :dependencies [[org.clojure/clojure "1.9.0"]
+                                         [aysylu/loom "1.0.1"]]
+                          :main foo))
+          code (str (pr-str '(ns foo
+                               (:require [clojure.string :as str])))
+                    "\n"
+                    (pr-str '(defn -main []
+                                (println "Hello, World"))))]
+      (-> (lk/pod :foo {:app :foo})
+          (lk/add-container :bar "clojure:lein-2.8.1")
+          (lk/add-files-to-container :bar :bar-clj "/src"
+                                     {"project.clj" proj
+                                      "src/foo.clj" code})
+          (lk/update-container :bar assoc :command
+                               ["sh" "-c" "cp -r /src /work && cd /work && lein trampoline run"]))))
+
 ;; # Startup Ordering
 
 ;; Often, when one pod depends some service, we wish for it to waits
