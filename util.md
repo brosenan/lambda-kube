@@ -139,19 +139,30 @@ expressions. The `ns` should be `main-test`.
                                :source-file "test/main_test.clj"
                                :lein "test")))
 
-
-'(-> (lk/pod :foo {:tests :foo})
-     (lku/add-clj-test-container :test
-                                 '[[org.clojure/clojure "1.9.0"]]
-                                 '[(ns main-test
-                                     (:require [clojure.test :refer :all]))
-                                   (deftest one-equals-two
-                                     (is (= 1 2)))])
-     (lk/job :Never {:backoffLimit 0})
-     (lk/extract-additional)
-     ((fn [x] (cons x (-> x meta :additional))))
-     (lk/to-yaml)
-     (println))
+```
+The second test framework is
+[Midje](https://github.com/marick/Midje), supported by the
+`add-midje-container` function.
+```clojure
+(fact
+ (-> (lk/pod :foo {:tests :foo})
+     (lku/add-midje-container :test
+                              '[[org.clojure/clojure "1.9.0"]]
+                              '[(ns main-test
+                                  (:use midje.sweet))
+                                (fact
+                                 1 => 2)]))
+ => (-> (lk/pod :foo {:tests :foo})
+        (lku/add-clj-container :test
+                               '[[org.clojure/clojure "1.9.0"]]
+                               '[(ns main-test
+                                   (:use midje.sweet))
+                                 (fact
+                                  1 => 2)]
+                               :source-file "test/main_test.clj"
+                               :lein "midje"
+                               :proj {:profiles {:dev {:dependencies '[[midje "1.9.2"]]
+                                                       :plugins '[[lein-midje "3.2.1"]]}}})))
 
 ```
 # Startup Ordering

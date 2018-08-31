@@ -95,3 +95,10 @@
   (add-clj-container pod cont deps exprs
                      :source-file "test/main_test.clj"
                      :lein "test"))
+
+(defn add-midje-container [pod cont deps exprs]
+  (add-clj-container pod cont deps exprs
+                     :source-file "test/main_test.clj"
+                     :lein "midje"
+                     :proj {:profiles {:dev {:dependencies '[[midje "1.9.2"]]
+                                             :plugins '[[lein-midje "3.2.1"]]}}}))
