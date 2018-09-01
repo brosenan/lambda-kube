@@ -14,7 +14,8 @@
             [lambdakube.util-test :as lkut]
             [clojure.data.json :as json]
             [clojure.data.xml :as xml]
-            [clojure.java.shell :as sh]))
+            [clojure.java.shell :as sh]
+            [clojure.string :as str]))
 
 ```
 Lambda-Kube brings software to the cluster level. This raises an
@@ -56,7 +57,11 @@ injector. It takes the following paramters:
 3. A configuration map for building the system under test.
 4. A list of dependencies (as in a `rule`).
 5. A function which takes the dependencies as arguments and constructs a pod for running the test.
-`test` returns an injector with a new test and a new rule.
+
+`test` returns an injector with a new test and a new rule. The rule
+has an extra (first) dependency named `:run-<testname>`, which is
+later added to the configuration to make sure only this test runs
+when it needs to. The parameter is then ignored by the function.
 ```clojure
 (fact
  (let [$ (-> (lk/injector)
@@ -69,17 +74,17 @@ injector. It takes the following paramters:
                                   :bar bar}))))]
    (:tests $) => {:my-test {:some :config}}
    (let [[[func deps res]] (:rules $)]
-     deps => [:foo :bar]
+     deps => [:run-my-test :foo :bar]
      res => :my-test
      ;; The pod is wrapped with a job named `:test`
-     (func :FOO :BAR) => (-> (lk/pod :test {:foo :FOO
-                                            :bar :BAR})
-                             ;; We wrap the given pod with a job, and
-                             ;; make sure it never restarts on
-                             ;; failures. This applies both to the pod
-                             ;; restarting itself, and the job
-                             ;; creating a new pod.
-                             (lk/job :Never {:backoffLimit 0})))))
+     (func true :FOO :BAR) => (-> (lk/pod :test {:foo :FOO
+                                                 :bar :BAR})
+                                  ;; We wrap the given pod with a job, and
+                                  ;; make sure it never restarts on
+                                  ;; failures. This applies both to the pod
+                                  ;; restarting itself, and the job
+                                  ;; creating a new pod.
+                                  (lk/job :Never {:backoffLimit 0})))))
 
 ```
 ## Running a Single Test
@@ -120,7 +125,8 @@ register both modules. Then we call `run-test` on this injector.
     (lkt/log "Creating namespace foo-my-test") => nil
     (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 0}
     ;; Creation of the YAML file for the test setup
-    (lk/get-deployable $ {:some-dep :goo}) => ..deployable..
+    (lk/get-deployable $ {:some-dep :goo
+                          :run-my-test true}) => ..deployable..
     (lk/to-yaml ..deployable..) => ..yaml..
     (spit "foo-my-test.yaml" ..yaml..) => nil
     ;; Apply the YAML within the namespace
@@ -173,7 +179,8 @@ If the job fails, we return a `:fail` status
    (provided
     (lkt/log "Creating namespace foo-my-test") => nil
     (sh/sh "kubectl" "create" "ns" "foo-my-test") => {:exit 0}
-    (lk/get-deployable $ {:some-dep :goo}) => ..deployable..
+    (lk/get-deployable $ {:some-dep :goo
+                          :run-my-test true}) => ..deployable..
     (lk/to-yaml ..deployable..) => ..yaml..
     (spit "foo-my-test.yaml" ..yaml..) => nil
     (lkt/log "Deploying test :my-test") => nil
@@ -251,7 +258,13 @@ file name.
                             [:test {:name "bar"
                                     :result "Fail"}]]]]) => ..xml..
     (xml/indent-str ..xml..) => ..str..
-    (spit "res.xml" ..str..) => nil)))
+    ;; We assign a stylesheet to the XML. To do so, we first find the
+    ;; end of the `<?xml?>` declaration.
+    (str/index-of ..str.. "?>") => 10
+    ;; Then we insert the stylesheet declaration to it
+    (lkt/insert-stylesheet-pi ..str.. 12) => ..xml-with-style..
+    (spit "res.xml" ..xml-with-style..) => nil)))
+
 
 ```
 # Top-Level Function
@@ -260,23 +273,29 @@ file name.
 predicate function, and does the following:
 1. Calls `run-tests` to execute all registered tests (filtered by the predicate function if provided).
 2. Calls `to-xunit` with the result, to write a results file named `<prefix>-results.xml`.
-3. Returns `true` if all tests have passed, or `false` otherwise.
+3. Returns a concatenation of the logs of all the _failing_ cases. For a successful run, this should be an empty string.
 ```clojure
 (fact
  (let [$ {:tests {:foo {:foo :config}
                   :bar {:bar :config}}}]
-   (lkt/kube-tests $ "prefix") => false
+   (lkt/kube-tests $ "prefix") => "Test :bar\nbar log\n==="
    (provided
     (lkt/run-tests $ "prefix" (constantly true))
-    => {:foo {:status :pass}
-        :bar {:status :fail}}
-    (lkt/to-xunit {:foo {:status :pass}
-                   :bar {:status :fail}} "prefix-results.xml") => nil)
+    => {:foo {:status :pass
+              :log "foo log"}
+        :bar {:status :fail
+              :log "bar log"}}
+    (lkt/to-xunit {:foo {:status :pass
+                         :log "foo log" }
+                   :bar {:status :fail
+                         :log "bar log"}} "prefix-results.xml") => nil)
 
-   (lkt/kube-tests $ "prefix" ..some-filter..) => true
+   (lkt/kube-tests $ "prefix" ..some-filter..) => ""
    (provided
     (lkt/run-tests $ "prefix" ..some-filter..)
-    => {:foo {:status :pass}}
-    (lkt/to-xunit {:foo {:status :pass}} "prefix-results.xml") => nil)))
+    => {:foo {:status :pass
+              :log "foo log"}}
+    (lkt/to-xunit {:foo {:status :pass
+                         :log "foo log"}} "prefix-results.xml") => nil)))
 ```
 
