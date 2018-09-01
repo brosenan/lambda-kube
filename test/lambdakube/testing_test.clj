@@ -76,7 +76,7 @@
                                   ;; creating a new pod.
                                   (lk/job :Never {:backoffLimit 0})))))
 
-;; ## Running a Single Test
+;; # Running a Single Test
 
 ;; The function `run-test` takes an injector, a name of a test
 ;; (keyword), and a prefix (string) as parameters, and runs a single
