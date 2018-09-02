@@ -11,6 +11,7 @@ a plugin.
 `:require` the namespace:
 ```clojure
 (:require [lambdakube.core :as lk]
+          [lambdakube.util :as lku]
           [clojure.java.io :as io])
 ```
 
