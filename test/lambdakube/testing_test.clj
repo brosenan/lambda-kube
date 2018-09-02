@@ -13,7 +13,7 @@
 ;; important question: _How do we test cluster-level software_? In
 ;; this section we try to answer this question.
 
-;; ## What are we Testing?
+;; # What are we Testing?
 
 ;; The first thing we would like to test at the cluster level, we
 ;; would like to test _integrations_ between components. We trust that
