@@ -1,7 +1,7 @@
-  * [What are we Testing?](#what-are-we-testing?)
+* [What are we Testing?](#what-are-we-testing?)
 * [Test Support in Lambda-Kube](#test-support-in-lambda-kube)
 * [Defining Tests](#defining-tests)
-  * [Running a Single Test](#running-a-single-test)
+* [Running a Single Test](#running-a-single-test)
 * [Running All Tests](#running-all-tests)
 * [Writing Test Results](#writing-test-results)
 * [Top-Level-Function](#top-level-function)
@@ -22,7 +22,7 @@ Lambda-Kube brings software to the cluster level. This raises an
 important question: _How do we test cluster-level software_? In
 this section we try to answer this question.
 
-## What are we Testing?
+# What are we Testing?
 
 The first thing we would like to test at the cluster level, we
 would like to test _integrations_ between components. We trust that
@@ -87,7 +87,7 @@ when it needs to. The parameter is then ignored by the function.
                                   (lk/job :Never {:backoffLimit 0})))))
 
 ```
-## Running a Single Test
+# Running a Single Test
 
 The function `run-test` takes an injector, a name of a test
 (keyword), and a prefix (string) as parameters, and runs a single

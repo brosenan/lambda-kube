@@ -75,85 +75,103 @@ A complete example can be found [here](https://github.com/brosenan/lambdakube-ex
 * [Test Framework](testing.md)
 
 # Rationale
-Kubernetes is a really great tool, which transforms the task of
-deploying complex systems from an IT task to a software development
-task. Lambda-kube takes this one step further and turns the generation of
-the YAML files which describe the deployment declaratievly, from a
-"configuration" task to a programming task.
+Kubernetes is great. With Kubernetes, the _imperative_ notion of
+_installing_ software becomes a thing of the past, while the
+_declarative_ notion of _describing_ how software is to be installed
+becomes the way it is done. A declarative definition allows us,
+developers, to specify just how we want our software installed, and to
+have it under source control, so that we can install it once and
+again, exactly the same way.
 
-Imagine you are developing a new database system. Your database system
-consists of a few different kinds of nodes. Now imagine you wish to
-allow your users to deploy this database as part of their software. A
-good first step in this direction would be to package your software as
-Docker images, one for each type of node. But a Docker image does not
-answer the question of how these nodes should be connected to one
-another.
+To allow us to do so, Kubernetes defines a declarative language -- a
+language of _API Objects_. Today, these API objects are either written
+by hands, typically in [YAML](http://yaml.org/) format, or rendered
+using [Go templates](https://golang.org/pkg/text/template/) that come
+as part of a [Helm](https://helm.sh/) chart.
 
-To answer this question, you could, for example, provide example YAML
-files for Kubernetes, to give the user a sense of what they need to do
-in order to deploy your database as part of their system, given they
-are using Kubernetes. However, the files you provide are no more than
-an example. Eventually, the user will have to update these files to
-match their needs.
+While the language provided by Kubernetes exposes its entire API,
+providing developers access to all its wealth, this language does not
+provide one important thing -- _abstraction_.
 
-Lambda-kube allows you to provide them a Clojure library, which generates
-these YAML files according to the recipe you design, but matching the
-parameters they provide. Being a Clojure library, it can be then
-integrated in a library they write, which integrates your database
-with their software, and potentially other microservices, each coming
-with its own Lambda-kube-based library.
+In programming languages, abstraction mechanisms allow developers
+define new concepts, and then use them (and reuse them) in different
+contexts. _Functions_, for example, provide a powerful abstraction
+mechanism in which some computation is given a name, allowing it to be
+reused in different contexts, with different parameters.
 
-# Why Not Helm?
-The above description matches the mission of the Helm project, and
-Helm charts could indeed stand in place of Lambda-kube libraries. However,
-the way I see it, Helm has two significant drawbacks.
+Kubernetes allows us to define objects such
+as
+[Pods](https://kubernetes.io/docs/concepts/workloads/pods/pod/),
+[Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) and
+[ConfigMaps](https://kubernetes.io/docs/tutorials/configuration/). These
+are the building blocks provided by Kubernetes. But it doesn't give
+you a mechanism to create your own blocks. This is Lambda-Kube comes
+into the picture.
 
-## Text-based Templates
-Helm charts use text-based templates to generate YAML files. While
-this can work properly in simple cases, this can break horribly for
-others.
+# What Is Lambda-Kube?
+Lambda-Kube is a Clojure library. It contains functions, most of which
+are purely-functional (have no side-effects). These functions allow
+developers to build objects in the Kubernetes object language. These
+objects can then be handed to Kubernetes, to turn them into a running
+system.
 
-For example, the template engine used by Helm does nothing to escape
-string values. For example, if you provide a string value to a field
-and that string value contains new-lines, these new-line characters
-will break the YAML syntax.
+Clojure is very good in making functions, and especially pure
+functions, compose. Unlike the Kubernetes object language, in which
+object definitions are often big, allowing many options, Lambda-Kube
+functions are designed to be simple, but are designed to compose well,
+following
+the
+[Unix Philosophy](https://en.wikipedia.org/wiki/Unix_philosophy). 
 
-Similarly, if you use a template to create a block (e.g., a map of
-values), it is your responsibility to indent the output properly, or
-else you will break the YAML syntax.
+Lambda-Kube provides a collection of functions that represent the
+major Kubernetes objects and some patterns regarding them, but users
+are encouraged to extend this library with their own functions, adding
+functionality Lambda-Kube does not address.
 
-## Lack of Abstraction
-One of the problems with Kubernetes YAML files to begin with, is their
-verbosity. These files make extensive use of names, which are defined
-in one place, and used in another. These names bloat up the YAML
-files.
+# Is Lambda-Kube A Helm Replacement?
+Well, yes and no.
 
-Helm does not provide a real answer for this bloat. It hides the bloat
-in charts, but the charts are even more verbose than the YAML files
-they produce. Wanting to account for every possibility, real-life
-charts are bloated with many esoteric options, making them hard for
-developers to understand them and maintain them.
+No, because Helm is considered a "_package manager for Kubernetes_",
+while Lambda-Kube is a library for building Kubernetes
+objects. However, by generating Kubernetes objects, Lambda-Kube
+provides an alternative to Helm's use of Go
+templates. [Here is why we believe this alternative is better](helm.md).
 
-The root cause for this is that Go Templates do not provide a good
-abstraction mechanism. What you want to have is the ability to create
-small things, each responsible for one thing, and to have the
-mechanism to compose them together. Go Templates are not good at this,
-but functional programming is.
+Additionally, it allows users to write reusable Clojure libraries that
+describe the deployment of services. As such, they can play the
+role [charts](https://docs.helm.sh/developing_charts/) play in
+Helm. Clojure already has a few good package managers
+(e.g., [Leiningen](https://leiningen.org/)
+and [Boot](https://github.com/boot-clj/boot)), which can install such
+libraries on demand. This makes _them_ (and not Lambda-Kube itself),
+Helm-replacements.
 
 # What Lambda-Kube Is
-Lambda-Kube is a Clojure library. It contains three families of functions:
+Lambda-Kube is a Clojure library. Its [core namespace](core.md) contains three
+families of functions:
 1. Functions for [defining API objects](core.md#basic-api-object-functions), such as Pods, Deployments, Services, etc.
 2. Functions for [augmenting API objects](core.md#modifier-functions), adding things to them or updating their properties.
 3. Functions for [defining _modules_](core.md#dependency-injection), supporting the gradual definition of a complete system, based on [Dependency Injection (DI)](https://en.wikipedia.org/wiki/Dependency_injection).
 
-Lambda-Kube takes follows a few best practices made to make the systems you build with it maintainable.
-1. It is purely functional. It uses no side-effects and even no macros. Just plain old Clojure functions.
+In addition, it has a [utility namespace](util.md), which provides
+functions for common patters, and a [testing framework](testing.md),
+which facilitates the definition of integration tests.
+
+Lambda-Kube takes follows a few best practices made to make the
+systems you build with it maintainable.
+1. It is purely functional. It uses no side-effects and even no macros. Just plain old Clojure functions (with the exception of functions that actually interact with Kubernetes).
 3. Functions are simple and cohesive, intended to do one thing and to it well.
 2. Functions are composable. Augmentation is always done on the first argument. This makes most functions compatible with Clojure's [threading macro](https://clojuredocs.org/clojure.core/-%3E) (->).
 
-If a function we provide does not do exactly what you are looking for,
-you can replace it, or better yet, augment it with your own. For
-example, our `pod` function creates a very basic pod. It allows you to
-add additional fields, but if there is a pattern you want in your
-pods, and the `pod` function doesn't support it, you can (and should)
-write an augmentation function to modify the pod in any way you want.
+# What Lambda-Kube is Not
+
+Lambda-Kube does not aspire to:
+1. Be Comprehensive. If you find functionality that is missing, feel free to write it yourself. If you feel it can be useful to others, please open a PR.
+2. Validate it Outputs. Kubernetes will always be better than anyone in validating its input. We do not attempt to replicate its logic. Lambda-Kube will allow you to build invalid objects, and it's up to you to make sure you get it right. Fortunately, it does make it easy to test things as you write them, by using `lein auto run`.
+
+## License
+
+Copyright © 2018 Boaz Rosenan
+
+Distributed under the Eclipse Public License either version 1.0 or (at
+your option) any later version.
