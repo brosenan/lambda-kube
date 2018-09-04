@@ -425,6 +425,35 @@
                {:name :baz
                 :image "some-other-image"}]}}}})
 
+;; `update-container` works on init containers as well as regular
+;; containers.
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :bar "some-image")
+     (lk/add-init-container :baz "some-other-image")
+     (lk/deployment 3)
+     ;; We add an environment to a container.
+     (lk/update-template lk/update-container :baz lk/add-env {:FOO "BAZ"}))
+ => {:apiVersion "apps/v1"
+     :kind "Deployment"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector
+            {:matchLabels {:bar :baz}}
+            :template
+            {:metadata
+             {:labels {:bar :baz}}
+             :spec
+             {:containers
+              [{:name :bar
+                :image "some-image"}]
+              :initContainers
+              [{:name :baz
+                :image "some-other-image"
+                :env [{:name :FOO
+                       :value "BAZ"}]}]}}}})
+
 ;; # Exposure Functions
 
 ;; In Kubernetes, to make a network interface in one pod available
@@ -959,7 +988,7 @@
      (last))
  => (-> (lk/pod :my-pod {:x "val"})
         (lk/add-container :baz "some-image"
-                          (lk/add-env {} {:MY_SVC_HOSTNAME :my-service
+                          (lk/add-env {} {:MY_SVC_HOSTNAME "my-service"
                                           :MY_SVC_WEB_PORT 80}))))
 
 

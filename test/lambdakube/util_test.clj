@@ -189,6 +189,6 @@
  => (-> (lk/pod :some-pod {:foo :baz})
         (lk/add-init-container :wait-for-some-service-web
                                "busybox"
-                               {:command ["nc" "-z" :some-service "80"]})))
+                               {:command ["sh" "-c" "while ! nc -z some-service 80; do sleep 1; done"]})))
 
 

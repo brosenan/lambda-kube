@@ -26,7 +26,9 @@
         cont (keyword (str "wait-for-" (name hostname) "-" (name portname)))]
     (-> pod
         (lk/add-init-container cont "busybox"
-                               {:command ["nc" "-z" hostname (str (ports portname))]}))))
+                               {:command ["sh"
+                                          "-c"
+                                          (str "while ! nc -z " hostname " " (ports portname) "; do sleep 1; done")]}))))
 
 
 (defn add-clj-test-container [pod cont deps exprs]

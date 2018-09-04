@@ -123,7 +123,13 @@
                         (apply f cont args)
                         ;; else
                         cont))]
-    (update-in pod [:spec :containers] #(map update-cont %))))
+    (-> pod
+        (update-in [:spec :containers] #(map update-cont %))
+        (update-in [:spec :initContainers] #(map update-cont %))
+        (update :spec #(if (empty? (:initContainers %))
+                         (dissoc % :initContainers)
+                         ;; else
+                         %)))))
 
 (defn- mount-func [name mounts]
   (apply comp (for [[cont path] mounts]
@@ -301,7 +307,7 @@
                 {:annotations (-> obj :metadata :annotations)})))
       (desc (fn [svc]
               (when (= (:kind svc) "Service")
-                {:hostname (-> svc :metadata :name)
+                {:hostname (-> svc :metadata :name name)
                  :ports (->> (for [{:keys [name port]} (-> svc :spec :ports)]
                                [name port])
                              (into {}))})))))
