@@ -92,6 +92,7 @@
                   (-> (lk/pod :this-name-does-not-matter {})
                       (lku/add-clj-container :cont
                                              '[[org.clojure/clojure "1.9.0"]]
+                                             {}
                                              '[(ns main)
                                                (defn -main []
                                                  (println "Hello, World"))])

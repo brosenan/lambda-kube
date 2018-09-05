@@ -20,7 +20,8 @@
 ;; 1. The pod to augment.
 ;; 2. The name of the container to create.
 ;; 3. A leiningen-style dependencies vector (quoted).
-;; 4. A vector containing the nanoservice code (quoted).
+;; 4. A map of constants, to be passed to the code as `def`ined variables. Designed to be limited to [EDN](https://github.com/edn-format/edn)-compatible values.
+;; 5. A vector containing the nanoservice code (quoted).
 
 ;; The code should start with the `ns` macro, where the namespace
 ;; should always be `main`. A `-main` function needs to be implemented
@@ -37,10 +38,12 @@
      (lku/add-clj-container :bar
                             '[[org.clojure/clojure "1.9.0"]
                               [aysylu/loom "1.0.1"]]
+                            {:hello "Hello"
+                             :world "World"}
                             '[(ns main
                                 (:require [clojure.string :as str]))
                               (defn -main []
-                                (println "Hello, World"))]))
+                                (println (str hello ", " world)))]))
  => (let [proj (pr-str '(defproject myproj "0.0.1-SNAPSHOT"
                           :dependencies [[org.clojure/clojure "1.9.0"]
                                          [aysylu/loom "1.0.1"]]
@@ -48,8 +51,12 @@
           code (str (pr-str '(ns main
                                (:require [clojure.string :as str])))
                     "\n"
+                    (pr-str '(def hello "Hello"))
+                    "\n"
+                    (pr-str '(def world "World"))
+                    "\n"
                     (pr-str '(defn -main []
-                                (println "Hello, World"))))]
+                               (println (str hello ", " world)))))]
       (-> (lk/pod :foo {:app :foo})
           (lk/add-container :bar "clojure:lein-2.8.1")
           (lk/add-files-to-container :bar :bar-clj "/src"
@@ -69,6 +76,7 @@
      (lku/add-clj-container :bar
                             '[[org.clojure/clojure "1.9.0"]
                               [aysylu/loom "1.0.1"]]
+                            {}
                             '[(ns foo
                                 (:require [clojure.string :as str]))
                               (defn -main []
@@ -102,24 +110,26 @@
 
 ;; `add-clj-test-container` adds a container based on
 ;; `clojure.test`. Like `add-clj-container`, it takes a pod, a name
-;; for the new container, a vector of dependencies, and a vector of
-;; s-expressions, which in its case should include `testing`
-;; expressions. The `ns` should be `main-test`.
+;; for the new container, a vector of dependencies, a map of
+;; constants, and a vector of s-expressions, which in its case should
+;; include `testing` expressions. The `ns` should be `main-test`.
 (fact
  (-> (lk/pod :foo {:tests :foo})
      (lku/add-clj-test-container :test
                                  '[[org.clojure/clojure "1.9.0"]]
+                                 {:expected 2}
                                  '[(ns main-test
                                      (:require [clojure.test :refer :all]))
                                    (deftest one-equals-two
-                                     (is (= 1 2)))]))
+                                     (is (= 1 expected)))]))
  => (-> (lk/pod :foo {:tests :foo})
         (lku/add-clj-container :test
                                '[[org.clojure/clojure "1.9.0"]]
+                               {:expected 2}
                                '[(ns main-test
                                    (:require [clojure.test :refer :all]))
                                    (deftest one-equals-two
-                                     (is (= 1 2)))]
+                                     (is (= 1 expected)))]
                                :source-file "test/main_test.clj"
                                :lein "test")))
 
@@ -130,17 +140,19 @@
  (-> (lk/pod :foo {:tests :foo})
      (lku/add-midje-container :test
                               '[[org.clojure/clojure "1.9.0"]]
+                              {:expected 2}
                               '[(ns main-test
                                   (:use midje.sweet))
                                 (fact
-                                 1 => 2)]))
+                                 1 => expected)]))
  => (-> (lk/pod :foo {:tests :foo})
         (lku/add-clj-container :test
                                '[[org.clojure/clojure "1.9.0"]]
+                               {:expected 2}
                                '[(ns main-test
                                    (:use midje.sweet))
                                  (fact
-                                  1 => 2)]
+                                  1 => expected)]
                                :source-file "test/main_test.clj"
                                :lein "midje"
                                :proj {:profiles {:dev {:dependencies '[[midje "1.9.2"]]

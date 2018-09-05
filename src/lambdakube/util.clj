@@ -2,15 +2,20 @@
   (:require [lambdakube.core :as lk]
             [clojure.string :as str]))
 
-(defn add-clj-container [pod cont deps code & {:keys [source-file proj lein]
-                                               :or {source-file "src/main.clj"
-                                                    proj {}
-                                                    lein "run"}}]
+(defn add-clj-container [pod cont deps constants code
+                         & {:keys [source-file proj lein]
+                            :or {source-file "src/main.clj"
+                                 proj {}
+                                 lein "run"}}]
   (let [projmap (-> {:dependencies deps
                      :main 'main}
                     (merge proj))
         proj (pr-str (concat ['defproject 'myproj "0.0.1-SNAPSHOT"]
                              (mapcat identity projmap)))
+        code (concat [(first code)]
+                     (for [[k v] constants]
+                       (list 'def (-> k name symbol) v))
+                     (rest code))
         code (str/join "\n" (map pr-str code))]
     (-> pod
         (lk/add-container cont "clojure:lein-2.8.1")
@@ -31,13 +36,13 @@
                                           (str "while ! nc -z " hostname " " (ports portname) "; do sleep 1; done")]}))))
 
 
-(defn add-clj-test-container [pod cont deps exprs]
-  (add-clj-container pod cont deps exprs
+(defn add-clj-test-container [pod cont deps constants exprs]
+  (add-clj-container pod cont deps constants exprs
                      :source-file "test/main_test.clj"
                      :lein "test"))
 
-(defn add-midje-container [pod cont deps exprs]
-  (add-clj-container pod cont deps exprs
+(defn add-midje-container [pod cont deps constants exprs]
+  (add-clj-container pod cont deps constants exprs
                      :source-file "test/main_test.clj"
                      :lein "midje"
                      :proj {:profiles {:dev {:dependencies '[[midje "1.9.2"]]
