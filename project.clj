@@ -1,6 +1,6 @@
-(defproject brosenan/lambdakube "0.7.1-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+(defproject brosenan/lambdakube "0.8.0-SNAPSHOT"
+  :description "A Clojure library for generating Kubernetes API objects "
+  :url "https://github.com/brosenan/lambda-kube"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.9.0"]
