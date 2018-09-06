@@ -1,6 +1,7 @@
 (ns lambdakube.util
   (:require [lambdakube.core :as lk]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.data.json :as json]))
 
 (defn add-clj-container [pod cont deps constants code
                          & {:keys [source-file proj lein]
@@ -47,3 +48,41 @@
                      :lein "midje"
                      :proj {:profiles {:dev {:dependencies '[[midje "1.9.2"]]
                                              :plugins '[[lein-midje "3.2.1"]]}}}))
+
+
+(defn- get-ver [lib]
+  (or
+   (->> ;; We start by feching the classpath and splitting it.
+    (-> (System/getProperty "java.class.path")
+        (str/split #":"))
+    ;; Then we split each path using the path separator
+    (map #(str/split % #"/"))
+    ;; When we reverse the path, the jar file name becomes the first
+    ;; element, the version becomes the second and the library name
+    ;; becomes the third
+    (map reverse)
+    ;; We filter based on the library name.
+    (filter #(= (nth % 2) lib))
+    ;; Take the first (and hopefully, only) result.
+    first
+    ;; And extract its version.
+    second)
+   ;; For the current project, we there is a property
+   (System/getProperty (str lib ".version"))))
+
+(defn add-itd-annotations [pod cls proj base-url]
+  (-> pod
+      (lk/add-annotation :class (.getName cls))
+      (lk/add-annotation :jar (str base-url "/"
+                                   (str/replace (namespace proj) "." "/") "/"
+                                   (name proj) "/"
+                                   (get-ver (name proj)) "/"
+                                   (name proj) "-" (get-ver (name proj)) "-standalone.jar"))))
+
+(defn inject-driver [cont itf dep]
+  (let [interface-name (-> itf
+                           .getName
+                           (str/replace "." "_")
+                           (str/upper-case)
+                           (keyword))]
+    (lk/add-env cont {interface-name (json/write-str dep)})))

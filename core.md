@@ -1071,7 +1071,7 @@ service, with some annotations, and a pod that depends on it.
                (fn [my-service]
                  (-> (lk/pod :my-pod {;; The :annotations attribute contains the object's annotations,
                                       ;; if they are defined.
-                                      :x (-> my-service :annotations ::key)})
+                                      :x (-> my-service ::key)})
                      (lk/add-container :baz "some-image"
                                        (lk/add-env {} {;; The :hostname attribute holds the name of the service
                                                        :MY_SVC_HOSTNAME (:hostname my-service)

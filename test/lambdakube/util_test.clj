@@ -204,3 +204,105 @@
                                {:command ["sh" "-c" "while ! nc -z some-service 80; do sleep 1; done"]})))
 
 
+;; # InjectTheDriver
+
+;; [InjectTheDriver](https://github.com/brosenan/InjectTheDriver)
+;; (ITD) is a framework for injecting drivers (objects acting as
+;; clients to services) into JVM-based services.
+
+;; Injection is done in two phases. First, on the _server_ side (the
+;; service we would like to provide a driver for), annotations are
+;; added to the service, naming the driver class, and a URL to an
+;; [uber-jar](https://stackoverflow.com/questions/11947037/what-is-an-uber-jar)
+;; that provides it. It is important that the driver class be packaged
+;; as an uber-jar, because it is loaded in isolation, without
+;; depending on the client's class-path.
+
+;; Second, on the _client_ side (the service that uses the driver to
+;; access the server), we take the description map of the server
+;; (which includes the annotations and possibly other things), and
+;; expose it to the client pod as an environment variable, named after
+;; the Java interface the driver is intended to provide. The value of
+;; this environment variable is encoded as JSON.
+
+;; The InjectTheDriver framework has a factory method
+;; (`DriverFactory.createDriverFor()`), which uses this environment
+;; variable to fetch the uber-jar and instantiate a driver object of
+;; the correct class. Consequently, the client can be totally agnostic
+;; of the server implementation, getting a driver "out of thin air".
+
+;; ## Server-Side
+
+;; On the server-side, we need to add two annotations: `:jar`,
+;; specifying the URL of the driver's uber-jar to be used, and
+;; `:class`, specifying the fully-qualified name of the class.
+
+;; The function `add-itd-annotations` takes a pod, a class, a
+;; fully-qualified project name in which the driver is defined (as a
+;; keyword), and the base-url of the Maven repository in which the
+;; project is published (e.g., `http://clojars.org/repo`).
+
+;; It assigns the `:class` annotation with the fully-qualified
+;; name of the given class, and builds a complete JAR URL based on the
+;; project name, the base repo URL and the version it infers from the
+;; classpath.
+(fact
+ (-> (lk/pod :foo {})
+     (lku/add-itd-annotations java.util.Map :io.forward/yaml "http://clojars.org/repo"))
+ => {:apiVersion "v1"
+     :kind "Pod"
+     :metadata {:labels {}
+                :name :foo
+                :annotations {:class "java.util.Map"
+                              :jar "http://clojars.org/repo/io/forward/yaml/1.0.9/yaml-1.0.9-standalone.jar"}}
+     :spec {}})
+
+;; ## Client-Side
+
+;; On the client-side, we need to inject an environment variable, one
+;; that `DriverFactory.createDriverFor()` can use to instantiate our class.
+
+;; The name of this environment variable is based on the name of the
+;; Java interface it implements, with the dots converted to
+;; underscores, and all letters are capitalized. The contents is a
+;; JSON representation of the description map of the server.
+
+;; The `inject-driver` function takes a container, a Java interface
+;; and a dependency description, and adds an environment variable as
+;; described above to the container.
+
+;; Consider for example the following module, defining a rule for a
+;; "server" and a "client" of that server.
+(defn module2 [$]
+  (-> $
+      (lk/rule :server []
+               (fn []
+                 (-> (lk/pod :server {})
+                     (lk/add-container :srv "some-image")
+                     (lk/deployment 3)
+                     (lku/add-itd-annotations java.util.HashMap :io.forward/yaml "http://clojars.org/repo")
+                     (lk/expose-cluster-ip :server
+                                           (lk/port :srv :web 80 80)))))
+      (lk/rule :client [:server]
+               (fn [server]
+                 (-> (lk/pod :client {})
+                     (lk/add-container :client "some-image"
+                                       (-> {}
+                                           (lku/inject-driver java.util.Map server))))))))
+
+;; When applying dependency injection, the client gets initialized
+;; with an environment variable named `JAVA_UTIL_MAP`, containing
+;; a JSON representation of the server's description.
+(fact
+ (-> (lk/injector)
+     (lk/standard-descs)
+     (module2)
+     (lk/get-deployable {})
+     (last))
+ => (-> (lk/pod :client {})
+        (lk/add-container :client "some-image"
+                          (-> {}
+                              (lk/add-env {:JAVA_UTIL_MAP (json/write-str {:class "java.util.HashMap"
+                                                                           :jar "http://clojars.org/repo/io/forward/yaml/1.0.9/yaml-1.0.9-standalone.jar"
+                                                                           :hostname "server"
+                                                                           :ports {:web 80}})})))))

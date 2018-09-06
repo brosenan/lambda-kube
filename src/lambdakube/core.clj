@@ -304,7 +304,7 @@
   (-> $
       (desc (fn [obj]
               (when (contains? (:metadata obj) :annotations)
-                {:annotations (-> obj :metadata :annotations)})))
+                (-> obj :metadata :annotations))))
       (desc (fn [svc]
               (when (= (:kind svc) "Service")
                 {:hostname (-> svc :metadata :name name)
