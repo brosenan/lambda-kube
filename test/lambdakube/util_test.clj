@@ -237,24 +237,21 @@
 ;; specifying the URL of the driver's uber-jar to be used, and
 ;; `:class`, specifying the fully-qualified name of the class.
 
-;; The function `add-itd-annotations` takes a pod, a class, a
-;; fully-qualified project name in which the driver is defined (as a
-;; keyword), and the base-url of the Maven repository in which the
-;; project is published (e.g., `http://clojars.org/repo`).
+;; The function `add-itd-annotations` takes a pod, a class, and the
+;; URL of the driver uberjar.
 
-;; It assigns the `:class` annotation with the fully-qualified
-;; name of the given class, and builds a complete JAR URL based on the
-;; project name, the base repo URL and the version it infers from the
-;; classpath.
+;; It assigns the `:class` annotation with the fully-qualified name of
+;; the given class, and sets the `:jar` annotation to be the given
+;; URL.
 (fact
  (-> (lk/pod :foo {})
-     (lku/add-itd-annotations java.util.Map :io.forward/yaml "http://clojars.org/repo"))
+     (lku/add-itd-annotations java.util.Map "http://foo.com/bar.jar"))
  => {:apiVersion "v1"
      :kind "Pod"
      :metadata {:labels {}
                 :name :foo
                 :annotations {:class "java.util.Map"
-                              :jar "http://clojars.org/repo/io/forward/yaml/1.0.9/yaml-1.0.9-standalone.jar"}}
+                              :jar "http://foo.com/bar.jar"}}
      :spec {}})
 
 ;; ## Client-Side
@@ -280,7 +277,7 @@
                  (-> (lk/pod :server {})
                      (lk/add-container :srv "some-image")
                      (lk/deployment 3)
-                     (lku/add-itd-annotations java.util.HashMap :io.forward/yaml "http://clojars.org/repo")
+                     (lku/add-itd-annotations java.util.HashMap "http://foo.com/bar.jar")
                      (lk/expose-cluster-ip :server
                                            (lk/port :srv :web 80 80)))))
       (lk/rule :client [:server]
@@ -303,6 +300,6 @@
         (lk/add-container :client "some-image"
                           (-> {}
                               (lk/add-env {:JAVA_UTIL_MAP (json/write-str {:class "java.util.HashMap"
-                                                                           :jar "http://clojars.org/repo/io/forward/yaml/1.0.9/yaml-1.0.9-standalone.jar"
+                                                                           :jar "http://foo.com/bar.jar"
                                                                            :hostname "server"
                                                                            :ports {:web 80}})})))))

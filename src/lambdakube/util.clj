@@ -70,14 +70,10 @@
    ;; For the current project, we there is a property
    (System/getProperty (str lib ".version"))))
 
-(defn add-itd-annotations [pod cls proj base-url]
+(defn add-itd-annotations [pod cls url]
   (-> pod
       (lk/add-annotation :class (.getName cls))
-      (lk/add-annotation :jar (str base-url "/"
-                                   (str/replace (namespace proj) "." "/") "/"
-                                   (name proj) "/"
-                                   (get-ver (name proj)) "/"
-                                   (name proj) "-" (get-ver (name proj)) "-standalone.jar"))))
+      (lk/add-annotation :jar url)))
 
 (defn inject-driver [cont itf dep]
   (let [interface-name (-> itf
