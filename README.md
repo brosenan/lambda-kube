@@ -21,24 +21,26 @@ Define a module function, defining the different parts of the system.
 (defn module [$]
   (-> $
       ;; A rule defines a resource (:frontend) and dependencies ([:num-fe-replicas]).
-      (lk/rule :frontend [:backend-master :backend-slave :num-fe-replicas]
-               (fn [master slave num-replicas]
-                 ;; We start with an empty pod.
-                 (-> (lk/pod :frontend {:app :guesbook
-                                        :tier :frontend})
-                     ;; We add a container, specifying a name, image and environments.
-                     (lk/add-container :php-redis "gcr.io/google-samples/gb-frontend:v4"
-                                       (lk/add-env {}  {:GET_HOST_FROM :dns}))
-                     ;; We load three files from resources and mount them to the container
-                     (lk/add-files-to-container :php-redis :new-gb-fe-files "/var/www/html"
-                                                (map-resources ["index.html" "controllers.js" "guestbook.php"]))
-                     ;; Wait for the master and slave to come up
-                     (lku/wait-for-service-port master :redis)
-                     (lku/wait-for-service-port slave :redis)
-                     ;; Then we wrap the pod with a deployment, specifying the number of replicas.
-                     (lk/deployment num-replicas)
-                     ;; Finally, we expose port 80 using a NodePort service.
-                     (lk/expose-node-port :frontend (lk/port :php-redis :web 80)))))))
+        (lk/rule :frontend [:backend-master :backend-slave :num-fe-replicas]
+                 (fn [master slave num-replicas]
+                   ;; We start with an empty pod.
+                   (-> (lk/pod :frontend {:app :guesbook
+                                          :tier :frontend})
+                       ;; We add a container, specifying a name, image and environments.
+                       (lk/add-container :php-redis "gcr.io/google-samples/gb-frontend:v4"
+                                         (lk/add-env {} {:GET_HOST_FROM :env
+                                                         :REDIS_MASTER_SERVICE_HOST (:hostname master)
+                                                         :REDIS_SLAVE_SERVICE_HOST (:hostname slave)}))
+                       ;; We load three files from resources and mount them to the container
+                       (lk/add-files-to-container :php-redis :new-gb-fe-files "/var/www/html"
+                                                  (map-resources ["index.html" "controllers.js" "guestbook.php"]))
+                       ;; Wait for the master and slave to come up
+                       (lku/wait-for-service-port master :redis)
+                       (lku/wait-for-service-port slave :redis)
+                       ;; Then we wrap the pod with a deployment, specifying the number of replicas.
+                       (lk/deployment num-replicas)
+                       ;; Finally, we expose port 80 using a NodePort service.
+                       (lk/expose-cluster-ip :frontend (lk/port :php-redis :web 80 80)))))))
 ```
 
 Define configuration.
