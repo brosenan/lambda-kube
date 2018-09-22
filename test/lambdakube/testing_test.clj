@@ -135,7 +135,7 @@
     (lkt/log "Test :my-test completed. Status: :pass") => nil
     ;; Delete the deployment and the namespace
     (lkt/log "Deleting namespace foo-my-test") => nil
-    (sh/sh "kubectl" "delete" "-f" "foo-my-test.yaml") => {:exit 0}
+    (sh/sh "kubectl" "-n" "foo-my-test" "delete" "-f" "foo-my-test.yaml") => {:exit 0}
     (sh/sh "kubectl" "delete" "ns" "foo-my-test") => {:exit 0})))
 
 ;; If `kubectl` returns a non-zero exit code, an exception is thrown,
