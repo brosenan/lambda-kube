@@ -52,6 +52,7 @@
       (log (str "Test " test " completed. Status: " status))
       (when (= status :pass)
         (log (str "Deleting namespace " kns))
+        (kubectl "delete" "-f" filename)
         (kubectl "delete" "ns" kns))
       {:log joblog
        :status status})))
