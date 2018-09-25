@@ -97,7 +97,6 @@ stateful set.
      :spec {:replicas 5
             :selector
             {:matchLabels {:bar :baz}}
-            :serviceName :foo
             :template
             {:metadata
              {:labels {:bar :baz}}
@@ -330,7 +329,6 @@ paths within the given containers.
      :spec {:replicas 5
             :selector
             {:matchLabels {:bar :baz}}
-            :serviceName :foo
             :template
             {:metadata
              {:labels {:bar :baz}}
@@ -372,7 +370,6 @@ new mount is appended.
      :spec {:replicas 5
             :selector
             {:matchLabels {:bar :baz}}
-            :serviceName :foo
             :template
             {:metadata
              {:labels {:bar :baz}}
@@ -622,6 +619,41 @@ It returns the deployment-like object augmented such that:
                                     :nodePort 30080}]}}]})
 
 ```
+If used on a stateful-set, `expose` also adds a `:serviceName`
+field to its `:spec`, specifying the service name.
+```clojure
+(fact
+ (-> (lk/pod :foo {:bar :baz})
+     (lk/add-container :quux "some-image")
+     (lk/stateful-set 3)
+     (lk/expose :foo-srv
+                (lk/port :quux :web 80 30080)
+                {:type :NodePort}
+                (fn [svc portname podport svcport]
+                  (update svc :spec lk/field-conj :ports
+                          {:port podport :nodePort svcport}))))
+ => {:apiVersion "apps/v1"
+     :kind "StatefulSet"
+     :metadata {:name :foo
+                :labels {:bar :baz}}
+     :spec {:replicas 3
+            :selector {:matchLabels {:bar :baz}}
+            :template {:metadata {:labels {:bar :baz}}
+                       :spec {:containers [{:name :quux
+                                            :image "some-image"
+                                            :ports [{:containerPort 80
+                                                     :name :web}]}]}}
+            :volumeClaimTemplates []
+            :serviceName :foo-srv}
+     :$additional [{:apiVersion "v1"
+                    :kind "Service"
+                    :metadata {:name :foo-srv}
+                    :spec {:type :NodePort
+                           :selector {:bar :baz}
+                           :ports [{:port 80
+                                    :nodePort 30080}]}}]})
+
+```
 The `expose` function is not intended to be used directly. Instead,
 `expose-*` functions cover the different service types.
 
@@ -666,11 +698,11 @@ returns a ClusterIP service.
 (fact
  (-> (lk/pod :foo {:bar :baz})
      (lk/add-container :quux "some-image")
-     (lk/deployment 3)
+     (lk/stateful-set 3)
      (lk/expose-headless :foo-srv
                          (lk/port :quux :web 80 8080)))
  => {:apiVersion "apps/v1"
-     :kind "Deployment"
+     :kind "StatefulSet"
      :metadata {:name :foo
                 :labels {:bar :baz}}
      :spec {:replicas 3
@@ -679,7 +711,9 @@ returns a ClusterIP service.
                        :spec {:containers [{:name :quux
                                             :image "some-image"
                                             :ports [{:containerPort 80
-                                                     :name :web}]}]}}}
+                                                     :name :web}]}]}}
+            :volumeClaimTemplates []
+            :serviceName :foo-srv}
      :$additional [{:apiVersion "v1"
                     :kind "Service"
                     :metadata {:name :foo-srv}

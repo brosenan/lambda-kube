@@ -80,7 +80,6 @@
                 (merge {:replicas replicas
                         :selector
                         {:matchLabels labels}
-                        :serviceName name
                         :template template
                         :volumeClaimTemplates []}))}))
   ([pod replicas]
@@ -175,10 +174,15 @@
              :metadata {:name name}
              :spec (-> attrs
                        (merge {:selector (-> pod :metadata :labels)}))}
-        [pod srv] (portfunc [pod srv editfunc])]
-    (-> depl
-        (field-conj :$additional srv)
-        (update :spec assoc :template pod))))
+        [pod srv] (portfunc [pod srv editfunc])
+        depl (-> depl
+                 (field-conj :$additional srv)
+                 (update :spec assoc :template pod))
+        depl (if (= (:kind depl) "StatefulSet")
+               (update depl :spec assoc :serviceName name)
+               ;; else
+               depl)]
+    depl))
 
 (defn expose-cluster-ip
   ([depl name portfunc]
