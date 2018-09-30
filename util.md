@@ -71,10 +71,19 @@ nanoservice's code.
           (lk/add-files-to-container :bar :bar-clj "/src"
                                      {"project.clj" proj
                                       "src/main.clj" code})
+          (lk/add-volume :maven-repo {:hostPath "/var/run/lambda-kube/maven-repo"
+                                      :type :DirectoryOrCreate}
+                         {:bar "/root/.m2/"})
           (lk/update-container :bar assoc :command
                                ["sh" "-c" "cp -r /src /work && cd /work && lein run"]))))
 
 ```
+A nanoservice will start its lifecycle by pulling dependencies into
+its Maven cache. To save time and memory, we place the cache in a
+host-owned directory (`/var/run/lambda-kube/maven-repo`), so that
+packages do not need to be reloaded to the same node more than
+once.
+
 `add-clj-container` takes optional keyword parameters to further
 customize the end result. `:source-file` determines the souce file
 to be used (defaults to `src/main.clj`). It needs to be coordinated
@@ -109,6 +118,9 @@ map). `:lein` contains to the `lein` command (defaults to `run`).
           (lk/add-files-to-container :bar :bar-clj "/src"
                                      {"project.clj" proj
                                       "src/foo.clj" code})
+          (lk/add-volume :maven-repo {:hostPath "/var/run/lambda-kube/maven-repo"
+                                      :type :DirectoryOrCreate}
+                         {:bar "/root/.m2/"})
           (lk/update-container :bar assoc :command
                                ["sh" "-c" "cp -r /src /work && cd /work && lein trampoline run"]))))
 

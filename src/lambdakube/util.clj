@@ -23,6 +23,9 @@
         (lk/add-files-to-container cont (keyword (str (name cont) "-clj")) "/src"
                                    {"project.clj" proj
                                     source-file code})
+        (lk/add-volume :maven-repo {:hostPath "/var/run/lambda-kube/maven-repo"
+                                    :type :DirectoryOrCreate}
+                       {cont "/root/.m2/"})
         (lk/update-container cont assoc :command
                              ["sh" "-c" (str "cp -r /src /work && cd /work && lein " lein)]))))
 
