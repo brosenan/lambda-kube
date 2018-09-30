@@ -71,8 +71,8 @@ nanoservice's code.
           (lk/add-files-to-container :bar :bar-clj "/src"
                                      {"project.clj" proj
                                       "src/main.clj" code})
-          (lk/add-volume :maven-repo {:hostPath "/var/run/lambda-kube/maven-repo"
-                                      :type :DirectoryOrCreate}
+          (lk/add-volume :maven-repo {:hostPath {:path "/var/run/lambda-kube/maven-repo"
+                                                 :type :DirectoryOrCreate}}
                          {:bar "/root/.m2/"})
           (lk/update-container :bar assoc :command
                                ["sh" "-c" "cp -r /src /work && cd /work && lein run"]))))
@@ -118,8 +118,8 @@ map). `:lein` contains to the `lein` command (defaults to `run`).
           (lk/add-files-to-container :bar :bar-clj "/src"
                                      {"project.clj" proj
                                       "src/foo.clj" code})
-          (lk/add-volume :maven-repo {:hostPath "/var/run/lambda-kube/maven-repo"
-                                      :type :DirectoryOrCreate}
+          (lk/add-volume :maven-repo {:hostPath {:path "/var/run/lambda-kube/maven-repo"
+                                                 :type :DirectoryOrCreate}}
                          {:bar "/root/.m2/"})
           (lk/update-container :bar assoc :command
                                ["sh" "-c" "cp -r /src /work && cd /work && lein trampoline run"]))))
