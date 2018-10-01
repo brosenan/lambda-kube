@@ -271,10 +271,11 @@ tag, which is then used in place of the original `clojure` tag.
 
 
 ```
-`create-clj-image` creates a temporary directory, generates a
-`Dockerfile` within it, and writes the given `project.clj` content,
-calls `docker build` with a tag derived from the contents of
-`project.clj`, and `docker push`. It returns the tag it created.
+`create-clj-image` calculates a tag based on the contents of
+`project.clj`. Then it checks if a file of the format
+`~/.lambda-kube/tag-<tag>` (where `<tag>` is replaced with the
+coalculated tag) exists. If it does, the function exists, returning
+the complete image name.
 ```clojure
 (fact
  (binding [lku/*docker-repo* "foo-repo"]
@@ -282,6 +283,24 @@ calls `docker build` with a tag derived from the contents of
    (provided
     (digest/sha-256 "(defproject ...)") => ..full-digest..
     (subs ..full-digest.. 0 16) => "12345"
+    (lku/file-exists? (io/file (lku/lk-dir) "tag-12345")) => true)))
+
+```
+If the file `~/.lambda-kube/tag-<tag>` does not exist,
+`create-clj-image` creates a temporary directory, generates a
+`Dockerfile` within it, and writes the given `project.clj` content,
+calls `docker build` with a tag derived from the contents of
+`project.clj`, and `docker push`. Finally, it creates a
+`~/.lambda-kube/tag-<tag>` file to prevent future creations of the
+same image.
+```clojure
+(fact
+ (binding [lku/*docker-repo* "foo-repo"]
+   (lku/create-clj-image "base-image:123" '(defproject ...)) => "foo-repo/clj-nanoservice:12345"
+   (provided
+    (digest/sha-256 "(defproject ...)") => ..full-digest..
+    (subs ..full-digest.. 0 16) => "12345"
+    (lku/file-exists? (io/file (lku/lk-dir) "tag-12345")) => false
     (lku/mk-temp-dir "clj-nano") => ..d..
     (spit (io/file ..d.. "Dockerfile")
           "FROM base-image:123
@@ -291,9 +310,10 @@ RUN lein deps") => irrelevant
     (spit (io/file ..d.. "project.clj")
           "(defproject ...)") => irrelevant
     (lku/log "Building image" "foo-repo/clj-nanoservice:12345") => irrelevant
-    (lku/sh "docker" "build" "-t" "foo-repo/clj-nanoservice:12345" "." :dir ..d..) => {:exit 0}
+    (lku/sh "docker" "build" "-t" "foo-repo/clj-nanoservice:12345" "." :dir ..d..) => irrelevant
     (lku/log "Pushing image" "foo-repo/clj-nanoservice:12345") => irrelevant
-    (lku/sh "docker" "push" "foo-repo/clj-nanoservice:12345" :dir ..d..) => {:exit 0})))
+    (lku/sh "docker" "push" "foo-repo/clj-nanoservice:12345" :dir ..d..) => irrelevant
+    (spit (io/file (lku/lk-dir) "tag-12345") "") => irrelevant)))
 
 
 ```

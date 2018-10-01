@@ -38,19 +38,23 @@
   (apply println args))
 
 (defn create-clj-image [base-image proj]
-  (let [d (mk-temp-dir "clj-nano")
-        tag (str *docker-repo* "/clj-nanoservice:" (-> proj pr-str digest/sha-256 (subs 0 16)))]
-    (spit (io/file d "Dockerfile")
-          (str/join "\n" [(str "FROM " base-image)
-                          "WORKDIR /src"
-                          "COPY project.clj ."
-                          "RUN lein deps"]))
-    (spit (io/file d "project.clj") (pr-str proj))
-    (log "Building image" tag)
-    (sh "docker" "build" "-t" tag "." :dir d)
-    (log "Pushing image" tag)
-    (sh "docker" "push" tag :dir d)
-    tag))
+  (let [tag (-> proj pr-str digest/sha-256 (subs 0 16))
+        image-name (str *docker-repo* "/clj-nanoservice:" tag)
+        guard (io/file (lk-dir) (str "tag-" tag))]
+    (when-not (file-exists? guard)
+      (let [d (mk-temp-dir "clj-nano")]
+        (spit (io/file d "Dockerfile")
+              (str/join "\n" [(str "FROM " base-image)
+                              "WORKDIR /src"
+                              "COPY project.clj ."
+                              "RUN lein deps"]))
+        (spit (io/file d "project.clj") (pr-str proj))
+        (log "Building image" image-name)
+        (sh "docker" "build" "-t" image-name "." :dir d)
+        (log "Pushing image" image-name)
+        (sh "docker" "push" image-name :dir d)
+        (spit guard "")))
+    image-name))
 
 (defn add-clj-container [pod cont deps constants code
                          & {:keys [source-file proj lein]
