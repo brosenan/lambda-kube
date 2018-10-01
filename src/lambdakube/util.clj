@@ -1,7 +1,50 @@
 (ns lambdakube.util
   (:require [lambdakube.core :as lk]
             [clojure.string :as str]
-            [clojure.data.json :as json]))
+            [clojure.data.json :as json]
+            [clojure.java.io :as io]
+            [clojure.java.shell :as sh])
+  (:import (java.nio.file Files)
+           (java.nio.file.attribute FileAttribute)))
+
+(def ^:dynamic *docker-repo* nil)
+
+(defn mk-temp-dir [prefix]
+  (-> (Files/createTempDirectory prefix (into-array FileAttribute []))
+      .toFile))
+
+(defn lk-dir []
+  (io/file (System/getProperty "user.home") ".lambda-kube"))
+
+(defn file-exists? [file]
+  (.isFile file))
+
+(defmacro with-docker-repo [& exprs]
+  `(let [d# (lk-dir)
+         f# (io/file d# "docker-repo")]
+     (binding [*docker-repo* (if (file-exists? f#)
+                               (slurp f#)
+                               ;; else
+                               nil)]
+       ~@exprs)))
+
+(defn sh [& args]
+  (let [{:keys [exit err]} (apply sh/sh args)]
+    (when (not= exit 0)
+      (throw (Exception. (str "Error status from command: " (str/join " " args) "\n" err))))))
+
+(defn create-clj-image [base-image proj]
+  (let [d (mk-temp-dir "clj-nano")
+        tag (str *docker-repo* "/clj-nanoservice:" (rand-int 100000000))]
+    (spit (io/file d "Dockerfile")
+          (str/join "\n" [(str "FROM " base-image)
+                          "WORKDIR /src"
+                          "COPY project.clj ."
+                          "RUN lein deps"]))
+    (spit (io/file d "project.clj") (pr-str proj))
+    (sh "docker" "build" "-t" tag "." :dir d)
+    (sh "docker" "push" tag :dir d)
+    tag))
 
 (defn add-clj-container [pod cont deps constants code
                          & {:keys [source-file proj lein]
@@ -11,17 +54,22 @@
   (let [projmap (-> {:dependencies deps
                      :main 'main}
                     (merge proj))
-        proj (pr-str (concat ['defproject 'myproj "0.0.1-SNAPSHOT"]
-                             (mapcat identity projmap)))
+        proj (concat ['defproject 'myproj "0.0.1-SNAPSHOT"]
+                     (mapcat identity projmap))
         code (concat [(first code)]
                      (for [[k v] constants]
                        (list 'def (-> k name symbol) v))
                      (rest code))
-        code (str/join "\n" (map pr-str code))]
+        code (str/join "\n" (map pr-str code))
+        tag "clojure:lein-2.8.1"
+        tag (if (nil? *docker-repo*)
+            tag
+            ;; else
+            (create-clj-image tag proj))]
     (-> pod
-        (lk/add-container cont "clojure:lein-2.8.1")
+        (lk/add-container cont tag)
         (lk/add-files-to-container cont (keyword (str (name cont) "-clj")) "/src"
-                                   {"project.clj" proj
+                                   {"project.clj" (pr-str proj)
                                     source-file code})
         (lk/update-container cont assoc :command
                              ["sh" "-c" (str "cp -r /src /work && cd /work && lein " lein)]))))

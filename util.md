@@ -1,5 +1,6 @@
 * [Clojure Nanoservices](#clojure-nanoservices)
   * [Clojure Test Containers](#clojure-test-containers)
+  * [Building Docker Images](#building-docker-images)
 * [Startup Ordering](#startup-ordering)
 * [InjectTheDriver](#injectthedriver)
   * [Server-Side](#server-side)
@@ -10,7 +11,8 @@
             [lambdakube.core :as lk]
             [lambdakube.util :as lku]
             [clojure.data.json :as json]
-            [clojure.java.shell :as sh]))
+            [clojure.java.shell :as sh]
+            [clojure.java.io :as io]))
 
 ```
 # Clojure Nanoservices
@@ -172,6 +174,123 @@ The second test framework is
                                :lein "midje"
                                :proj {:profiles {:dev {:dependencies '[[midje "1.9.2"]]
                                                        :plugins '[[lein-midje "3.2.1"]]}}})))
+
+```
+## Building Docker Images
+
+One of the down-sides of using Clojure nanoservices is the fact
+that a nanoservice has to first pull all its dependencies from
+Maven repositories before starting. This has impact on
+initialization time (and recovery time, in case a pod crashed and
+is restarted).
+
+To ovecome this problem, `add-clj-container` can optionally build a
+Docker image, which will include all the nanoservice's
+dependencies. This moves the dependency installation process to the
+host machine, and it will be done once per deployment. Furthermore,
+if the same system is being deployed multiple times, no new image
+will be built, thanks to Docker's use of content-addressing for its
+images.
+
+The down-side of using Docker images is that they require setup,
+such as credentials on a Docker repository. To alleviate this
+problem, we make this feature optional, defaulting to using the
+standard `clojure` image. We will create a dedicated image for each
+nanoservice if the dynamic variable `*docker-repo*` is set, with
+the name of the user's Docker repository, one he or she has `docker
+push` priveleges to.
+
+The macro `with-docker-repo` looks for this prefix in the file
+`~/.lambda-kube/docker-repo`. If it does not exist, it executes the
+underlying code without setting `*docker-repo*`.
+```clojure
+(fact
+ (lku/with-docker-repo
+   {:the-value-is lku/*docker-repo*}) => {:the-value-is nil}
+ (provided
+  (lku/lk-dir) => ..dir..
+  (lku/file-exists? (io/file ..dir.. "docker-repo")) => false))
+
+```
+If the file exists, its content becomes the value of
+`*docker-repo*`.
+```clojure
+(fact
+ (lku/with-docker-repo
+   {:the-value-is lku/*docker-repo*}) => {:the-value-is ..content..}
+ (provided
+  (lku/lk-dir) => ..dir..
+  (io/file ..dir.. "docker-repo") => ..file..
+  (lku/file-exists? ..file..) => true
+  (slurp ..file..) => ..content..))
+
+```
+When `add-clj-container` received a non-`nil` `*docker-repo*`, it
+calls `create-clj-image`, providing it the base image and the
+content of the `project.clj` file. `create-clj-image` returns a
+tag, which is then used in place of the original `clojure` tag.
+```clojure
+(fact
+ (binding [lku/*docker-repo* "foo-repo"]
+          (-> (lk/pod :foo {:app :foo})
+              (lku/add-clj-container :bar
+                                     '[[org.clojure/clojure "1.9.0"]
+                                       [aysylu/loom "1.0.1"]]
+                                     {:hello "Hello"
+                                      :world "World"}
+                                     '[(ns main
+                                         (:require [clojure.string :as str]))
+                                       (defn -main []
+                                         (println (str hello ", " world)))])))
+ => (let [proj (pr-str '(defproject myproj "0.0.1-SNAPSHOT"
+                          :dependencies [[org.clojure/clojure "1.9.0"]
+                                         [aysylu/loom "1.0.1"]]
+                          :main main))
+          code (str (pr-str '(ns main
+                               (:require [clojure.string :as str])))
+                    "\n"
+                    (pr-str '(def hello "Hello"))
+                    "\n"
+                    (pr-str '(def world "World"))
+                    "\n"
+                    (pr-str '(defn -main []
+                               (println (str hello ", " world)))))]
+      (-> (lk/pod :foo {:app :foo})
+          (lk/add-container :bar ..the-new-tag..)
+          (lk/add-files-to-container :bar :bar-clj "/src"
+                                     {"project.clj" proj
+                                      "src/main.clj" code})
+          (lk/update-container :bar assoc :command
+                               ["sh" "-c" "cp -r /src /work && cd /work && lein run"])))
+ (provided
+  (lku/create-clj-image "clojure:lein-2.8.1" '(defproject myproj "0.0.1-SNAPSHOT"
+                                                :dependencies [[org.clojure/clojure "1.9.0"]
+                                                               [aysylu/loom "1.0.1"]]
+                                                :main main)) => ..the-new-tag..))
+
+
+```
+`create-clj-image` creates a temporary directory, generates a
+`Dockerfile` within it, and writes the given `project.clj` content,
+calls `docker build` with a random tag, and `docker push`. It
+returns the tag it created.
+```clojure
+(fact
+ (binding [lku/*docker-repo* "foo-repo"]
+   (lku/create-clj-image "base-image:123" '(defproject ...)) => "foo-repo/clj-nanoservice:12345"
+   (provided
+    (rand-int 100000000) => 12345
+    (lku/mk-temp-dir "clj-nano") => ..d..
+    (spit (io/file ..d.. "Dockerfile")
+          "FROM base-image:123
+WORKDIR /src
+COPY project.clj .
+RUN lein deps") => irrelevant
+    (spit (io/file ..d.. "project.clj")
+          "(defproject ...)") => irrelevant
+    (lku/sh "docker" "build" "-t" "foo-repo/clj-nanoservice:12345" "." :dir ..d..) => {:exit 0}
+    (lku/sh "docker" "push" "foo-repo/clj-nanoservice:12345" :dir ..d..) => {:exit 0})))
+
 
 ```
 # Startup Ordering
