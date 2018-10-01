@@ -1,4 +1,4 @@
-(defproject brosenan/lambdakube "0.9.0-SNAPSHOT"
+(defproject brosenan/lambdakube "0.9.0"
   :description "A Clojure library for generating Kubernetes API objects "
   :url "https://github.com/brosenan/lambda-kube"
   :license {:name "Eclipse Public License"
