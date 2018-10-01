@@ -3,7 +3,8 @@
             [clojure.string :as str]
             [clojure.data.json :as json]
             [clojure.java.io :as io]
-            [clojure.java.shell :as sh])
+            [clojure.java.shell :as sh]
+            [digest])
   (:import (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)))
 
@@ -23,7 +24,7 @@
   `(let [d# (lk-dir)
          f# (io/file d# "docker-repo")]
      (binding [*docker-repo* (if (file-exists? f#)
-                               (slurp f#)
+                               (-> f# slurp str/trim)
                                ;; else
                                nil)]
        ~@exprs)))
@@ -33,16 +34,21 @@
     (when (not= exit 0)
       (throw (Exception. (str "Error status from command: " (str/join " " args) "\n" err))))))
 
+(defn log [& args]
+  (apply println args))
+
 (defn create-clj-image [base-image proj]
   (let [d (mk-temp-dir "clj-nano")
-        tag (str *docker-repo* "/clj-nanoservice:" (rand-int 100000000))]
+        tag (str *docker-repo* "/clj-nanoservice:" (-> proj pr-str digest/sha-256 (subs 0 16)))]
     (spit (io/file d "Dockerfile")
           (str/join "\n" [(str "FROM " base-image)
                           "WORKDIR /src"
                           "COPY project.clj ."
                           "RUN lein deps"]))
     (spit (io/file d "project.clj") (pr-str proj))
+    (log "Building image" tag)
     (sh "docker" "build" "-t" tag "." :dir d)
+    (log "Pushing image" tag)
     (sh "docker" "push" tag :dir d)
     tag))
 

@@ -12,7 +12,8 @@
             [lambdakube.util :as lku]
             [clojure.data.json :as json]
             [clojure.java.shell :as sh]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [digest]))
 
 ```
 # Clojure Nanoservices
@@ -217,12 +218,12 @@ If the file exists, its content becomes the value of
 ```clojure
 (fact
  (lku/with-docker-repo
-   {:the-value-is lku/*docker-repo*}) => {:the-value-is ..content..}
+   {:the-value-is lku/*docker-repo*}) => {:the-value-is "foo-repo"}
  (provided
   (lku/lk-dir) => ..dir..
   (io/file ..dir.. "docker-repo") => ..file..
   (lku/file-exists? ..file..) => true
-  (slurp ..file..) => ..content..))
+  (slurp ..file..) => "foo-repo\n"))
 
 ```
 When `add-clj-container` received a non-`nil` `*docker-repo*`, it
@@ -272,14 +273,15 @@ tag, which is then used in place of the original `clojure` tag.
 ```
 `create-clj-image` creates a temporary directory, generates a
 `Dockerfile` within it, and writes the given `project.clj` content,
-calls `docker build` with a random tag, and `docker push`. It
-returns the tag it created.
+calls `docker build` with a tag derived from the contents of
+`project.clj`, and `docker push`. It returns the tag it created.
 ```clojure
 (fact
  (binding [lku/*docker-repo* "foo-repo"]
    (lku/create-clj-image "base-image:123" '(defproject ...)) => "foo-repo/clj-nanoservice:12345"
    (provided
-    (rand-int 100000000) => 12345
+    (digest/sha-256 "(defproject ...)") => ..full-digest..
+    (subs ..full-digest.. 0 16) => "12345"
     (lku/mk-temp-dir "clj-nano") => ..d..
     (spit (io/file ..d.. "Dockerfile")
           "FROM base-image:123
@@ -288,7 +290,9 @@ COPY project.clj .
 RUN lein deps") => irrelevant
     (spit (io/file ..d.. "project.clj")
           "(defproject ...)") => irrelevant
+    (lku/log "Building image" "foo-repo/clj-nanoservice:12345") => irrelevant
     (lku/sh "docker" "build" "-t" "foo-repo/clj-nanoservice:12345" "." :dir ..d..) => {:exit 0}
+    (lku/log "Pushing image" "foo-repo/clj-nanoservice:12345") => irrelevant
     (lku/sh "docker" "push" "foo-repo/clj-nanoservice:12345" :dir ..d..) => {:exit 0})))
 
 
