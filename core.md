@@ -19,7 +19,7 @@
 * [Interacting with Kubernetes](#interacting-with-kubernetes)
 * [Augmentation Rules](#augmentation-rules)
   * [Matchers](#matchers)
-* [Updater](#updater)
+  * [Updater](#updater)
   * [Augmentation Rules](#augmentation-rules)
   * [Walkers](#walkers)
 * [Under the Hood](#under-the-hood)
@@ -1382,7 +1382,7 @@ Regular expressions match strings that, well, match them...
    (m "world, hello" {}) => false))
 
 ```
-# Updater
+## Updater
 
 An updater represents a function from a node to an updated version
 of itself. The `updater` function takes an updater and returns an

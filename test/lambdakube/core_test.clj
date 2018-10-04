@@ -1242,7 +1242,7 @@ spec:
    (m "hello, world" {}) => true
    (m "world, hello" {}) => false))
 
-;; # Updater
+;; ## Updater
 
 ;; An updater represents a function from a node to an updated version
 ;; of itself. The `updater` function takes an updater and returns an
