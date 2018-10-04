@@ -19,7 +19,7 @@
 * [Interacting with Kubernetes](#interacting-with-kubernetes)
 * [Augmentation Rules](#augmentation-rules)
   * [Matchers](#matchers)
-  * [Updater](#updater)
+  * [Updaters](#updaters)
   * [Augmentation Rules](#augmentation-rules)
   * [Walkers](#walkers)
 * [Under the Hood](#under-the-hood)
@@ -1293,7 +1293,7 @@ a node to match against, and a map of contextual information. The
 `matcher` function takes a matcher as parameter, and returns such a
 matcher function.
 
-Functions of arity 2 are taken as-is.
+Functions of arity 2 are taken verbatim.
 ```clojure
 (fact
  (let [f (fn [node ctx]
@@ -1382,7 +1382,7 @@ Regular expressions match strings that, well, match them...
    (m "world, hello" {}) => false))
 
 ```
-## Updater
+## Updaters
 
 An updater represents a function from a node to an updated version
 of itself. The `updater` function takes an updater and returns an
@@ -1423,7 +1423,10 @@ A map applies updaters to the respective fields of the node.
 ## Augmentation Rules
 
 A matcher and an updater are combined to a single function using
-the `aug-rule` function.
+the `aug-rule` function. An augmentation rule function takes a node
+and a context and applies the matcher to them. If it matches, the
+updater is applied to the node. If not, the node is returned
+unchanged.
 ```clojure
 (fact
  (let [r (lk/aug-rule {:foo #(> % 2)} {:bar inc})]
@@ -1442,6 +1445,19 @@ applies the functions in reverse order).
               (lk/aug-rule {:foo #(<= % 2)} {:bar dec})
               (lk/aug-rule {:foo 1} {:bar 7})]
        rule (lk/aug-rule-comp rules)]
+   (rule {:bar 2} {:foo 3}) => {:bar 3}
+   ;; The last rule takes precedence over its predecessors
+   (rule {:bar 2} {:foo 1}) => {:bar 7}))
+
+```
+As a shorthand, the function `aug-rules` takes a list (or vector)
+of pairs (vectors of size 2), each consisting of a matcher and an
+updater, and returns a combined rule.
+```clojure
+(fact
+ (let [rule (lk/aug-rules [[{:foo #(> % 2)} {:bar inc}]
+                           [{:foo #(<= % 2)} {:bar dec}]
+                           [{:foo 1} {:bar 7}]])]
    (rule {:bar 2} {:foo 3}) => {:bar 3}
    ;; The last rule takes precedence over its predecessors
    (rule {:bar 2} {:foo 1}) => {:bar 7}))
