@@ -1171,7 +1171,7 @@ spec:
 ;; `matcher` function takes a matcher as parameter, and returns such a
 ;; matcher function.
 
-;; Functions of arity 2 are taken as-is.
+;; Functions of arity 2 are taken verbatim.
 (fact
  (let [f (fn [node ctx]
            (= node 3))
@@ -1242,7 +1242,7 @@ spec:
    (m "hello, world" {}) => true
    (m "world, hello" {}) => false))
 
-;; ## Updater
+;; ## Updaters
 
 ;; An updater represents a function from a node to an updated version
 ;; of itself. The `updater` function takes an updater and returns an
@@ -1275,7 +1275,10 @@ spec:
 ;; ## Augmentation Rules
 
 ;; A matcher and an updater are combined to a single function using
-;; the `aug-rule` function.
+;; the `aug-rule` function. An augmentation rule function takes a node
+;; and a context and applies the matcher to them. If it matches, the
+;; updater is applied to the node. If not, the node is returned
+;; unchanged.
 (fact
  (let [r (lk/aug-rule {:foo #(> % 2)} {:bar inc})]
    (r {:foo 1 :bar 1} {}) => {:foo 1 :bar 1}
@@ -1291,6 +1294,17 @@ spec:
               (lk/aug-rule {:foo #(<= % 2)} {:bar dec})
               (lk/aug-rule {:foo 1} {:bar 7})]
        rule (lk/aug-rule-comp rules)]
+   (rule {:bar 2} {:foo 3}) => {:bar 3}
+   ;; The last rule takes precedence over its predecessors
+   (rule {:bar 2} {:foo 1}) => {:bar 7}))
+
+;; As a shorthand, the function `aug-rules` takes a list (or vector)
+;; of pairs (vectors of size 2), each consisting of a matcher and an
+;; updater, and returns a combined rule.
+(fact
+ (let [rule (lk/aug-rules [[{:foo #(> % 2)} {:bar inc}]
+                           [{:foo #(<= % 2)} {:bar dec}]
+                           [{:foo 1} {:bar 7}]])]
    (rule {:bar 2} {:foo 3}) => {:bar 3}
    ;; The last rule takes precedence over its predecessors
    (rule {:bar 2} {:foo 1}) => {:bar 7}))

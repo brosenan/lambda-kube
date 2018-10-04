@@ -390,6 +390,9 @@
     (fn [node ctx]
       ((f ctx) node))))
 
+(defn aug-rules [rules]
+  (aug-rule-comp (map #(apply aug-rule %) rules)))
+
 (defn apply-aug-rule [$ rule node]
   (let [rule' (fn rule' [node ctx]
                 (let [node (rule node ctx)]
@@ -401,3 +404,4 @@
                       (let [node ((first walkers) node rule')]
                         (recur node (rest walkers)))))))]
     (rule' node {})))
+
