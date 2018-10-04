@@ -1331,9 +1331,9 @@ spec:
 ;; container, if exists. We expect to see all three kinds of objects:
 ;; deployment, pod and containers, marked accordingly.
 (fact
- (let [rule (lk/aug-rule-comp [(lk/aug-rule {:kind "Deployment"} {:comment "This is a deployment"})
-                               (lk/aug-rule {:kind "Pod"} {:comment "This is a pod"})
-                               (lk/aug-rule {:kind "Container"} {:comment "This is a container"})])
+ (let [rule (lk/aug-rules [[{:kind "Deployment"} {:comment "This is a deployment"}]
+                           [{:kind "Pod"} {:comment "This is a pod"}]
+                           [{:kind "Container"} {:comment "This is a container"}]])
        $ {:walkers [(fn [node rule]
                       (if (contains? (:spec node) :containers)
                         (update-in node [:spec :containers]
