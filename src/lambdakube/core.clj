@@ -3,7 +3,8 @@
             [loom.alg :refer [topsort]]
             [clojure.string :as str]
             [yaml.core :as yaml]
-            [clojure.java.shell :as sh]))
+            [clojure.java.shell :as sh])
+  (:import (java.util.regex Pattern)))
 
 (defn field-conj [m k v]
   (if (contains? m k)
@@ -314,4 +315,89 @@
                 {:hostname (-> svc :metadata :name name)
                  :ports (->> (for [{:keys [name port]} (-> svc :spec :ports)]
                                [name port])
-                             (into {}))})))))
+                             (into {}))})))
+      (update :walkers concat
+              [(fn [node rule]
+                 (if (contains? (:spec node) :containers)
+                   (update-in node [:spec :containers] #(map (fn [c] (rule c {:kind "Container"})) %))
+                   ;; else
+                   node))
+               (fn [node rule]
+                 (if (= (:kind node) "Deployment")
+                   (update-in node [:spec :template] rule {:kind "Pod"})
+                   ;; else
+                   node))])))
+
+(defn extract-nodes [$ nodes]
+  (loop [nodes nodes]
+    (let [nodes' (set (apply concat (for [n nodes
+                                          f (:extractors $)]
+                                      (f n))))]
+      (if (= nodes' nodes)
+        nodes
+        ;; else
+        (recur nodes')))))
+
+(defn matcher [m]
+  (cond
+    (fn? m) (let [arity (-> m class
+                            .getDeclaredMethods
+                            first
+                            .getParameterTypes
+                            count)]
+              (case arity
+                2 m
+                1 (fn [node ctx]
+                    (m node))
+                (throw (Exception. (str "Invalid matcher arity: " arity)))))
+    (map? m) (fn [node ctx]
+               (every? identity (for [[k v] m]
+                                  (let [node (merge ctx node)
+                                        m' (matcher v)]
+                                    (and (contains? node k)
+                                         (m' (node k) ctx))))))
+    (set? m) (fn [node ctx]
+               (every? (fn [m'] ((matcher m') node ctx)) m))
+    (keyword? m) (fn [node ctx]
+                   (contains? node m))
+    (instance? Pattern m) (fn [node ctx]
+                            (if (string? node)
+                              (not (nil? (re-matches m node)))
+                              ;; else
+                              false))
+    :else (fn [node ctx]
+            (= node m))))
+
+(defn updater [u]
+  (cond
+    (fn? u) u
+    (vector? u) (->> u reverse (apply comp))
+    (map? u) (updater (vec (for [[k v] u]
+                             #(update % k (updater v)))))
+    :else (constantly u)))
+
+(defn aug-rule [m u]
+  (fn [node ctx]
+    (if ((matcher m) node ctx)
+      ((updater u) node)
+      ;; else
+      node)))
+
+(defn aug-rule-comp [rules]
+  (let [f (fn [ctx]
+            (apply comp (for [rule (reverse rules)]
+                          #(rule % ctx))))]
+    (fn [node ctx]
+      ((f ctx) node))))
+
+(defn apply-aug-rule [$ rule node]
+  (let [rule' (fn rule' [node ctx]
+                (let [node (rule node ctx)]
+                  (loop [node node
+                         walkers (:walkers $)]
+                    (if (empty? walkers)
+                      node
+                      ;; else
+                      (let [node ((first walkers) node rule')]
+                        (recur node (rest walkers)))))))]
+    (rule' node {})))

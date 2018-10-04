@@ -17,6 +17,11 @@
   * [Describers and Descriptions](#describers-and-descriptions)
   * [Standard Describers](#standard-describers)
 * [Interacting with Kubernetes](#interacting-with-kubernetes)
+* [Augmentation Rules](#augmentation-rules)
+  * [Matchers](#matchers)
+* [Updater](#updater)
+  * [Augmentation Rules](#augmentation-rules)
+  * [Walkers](#walkers)
 * [Under the Hood](#under-the-hood)
   * [Flattening Nested API Objects](#flattening-nested-api-objects)
 ```clojure
@@ -1241,6 +1246,276 @@ deleted, to make sure it is applied next time.
     => {:exit 33
         :err "there was a problem with foo"})
    (.exists f) => false))
+
+```
+# Augmentation Rules
+
+While dependency injection is a powerful tool for defining a
+system's functionality while decoupling between one component to
+another, it is not very good for defining the non-functional
+properties of a system, as they require a global view of the entire
+system.
+
+Consider for example resource limits and requests on
+containers. The values set there may vary significatly depending on
+the context. For functional tests we would require much less
+resources than, e.g., for production use.
+
+We could, for example, pass the amount of requested resources for
+the different kinds of containers as configuration parameters, and
+have the DI rules use them, but that would end up with a lot of
+code duplication, as resource specifications are required for each
+and every container.
+
+This problem is similar to the one that
+[CSS](https://en.wikipedia.org/wiki/Cascading_Style_Sheets) is
+intended to solve. While HTML defines the structure of a web-page,
+specifying the styling of each and every component in the HTML
+content would lead to a lot of duplication, as many elements share
+the same stying. CSS solves this problem by providing style
+attributes to HTML elements based on their basic properties (e.g.,
+type, id and class). In addition to removing much of the
+duplication, this also helps with decoupling, as different CSS
+stylesheets can be used in different cases, to style the same
+content.
+
+We take our inspiration from CSS, as we build our solution for
+non-functional specifications. As with CSS, our solution is made of
+declarative rules that apply to the structure of the deployment as
+constructed by the DI mechanism. As with CSS, each rule contains a
+_matcher_, determining on which node it needs to be applied, and an
+_update_ to be made to each node matching the selector.
+
+## Matchers
+
+Matchers boil down to Boolean functions, which take two parameter:
+a node to match against, and a map of contextual information. The
+`matcher` function takes a matcher as parameter, and returns such a
+matcher function.
+
+Functions of arity 2 are taken as-is.
+```clojure
+(fact
+ (let [f (fn [node ctx]
+           (= node 3))
+       m (lk/matcher f)]
+   (m 2 {}) => false
+   (m 3 {}) => true))
+
+```
+Functions of arity 1 are converted to arity 2 (second argument is
+ignored).
+```clojure
+(fact
+ (let [m (lk/matcher #(= % 3))]
+   (m 2 {}) => false
+   (m 3 {}) => true))
+
+```
+Other arities are illegal
+```clojure
+(fact
+ (lk/matcher (fn [])) => (throws "Invalid matcher arity: 0"))
+
+```
+A scalar value matches its value
+```clojure
+(fact
+ (let [m (lk/matcher 3)]
+   (m 2 {}) => false
+   (m 3 {}) => true))
+
+```
+A matcher can be a map, in which case all values are considered as
+matchers. For a map matcher to match a node, either the node or the
+context must have fields that satisfy each field of the matcher.
+```clojure
+(fact
+ (let [m (lk/matcher {:foo 3
+                      :bar #(> % 4)})]
+   (m {:foo 3
+       :bar 5} {}) => true
+   (m {:foo 3
+       :bar 3} {}) => false
+   (m {:foo 3} {}) => false
+   (m {:foo 3} {:bar 5}) => true))
+
+```
+If a key exists in both the node and the context, the node wins.
+```clojure
+(fact
+ (let [m (lk/matcher {:foo 3
+                      :bar #(> % 4)})]
+   (m {:foo 3
+       :bar 5}
+      {:bar 3}) => true))
+
+```
+Matchers can also be sets. The elements of the set are treated as
+matchers, and need to all match for the set to match.
+```clojure
+(fact
+ (let [m (lk/matcher #{vector?
+                       #(> (count %) 2)})]
+   (m {:foo 1
+       :bar 2
+       :baz 3} {}) => false
+   (m [1 2] {}) => false
+   (m [1 2 3] {}) => true))
+
+```
+Keywords match nodes that contain the key specified by the matcher,
+regardless of whether this key appears in the context or not.
+```clojure
+(fact
+ (let [m (lk/matcher :foo)]
+   (m {:foo 1} {}) => true
+   (m {} {:foo 1}) => false))
+
+```
+Regular expressions match strings that, well, match them...
+```clojure
+(fact
+ (let [m (lk/matcher #"hello.*")]
+   (m {} {}) => false
+   (m "hello, world" {}) => true
+   (m "world, hello" {}) => false))
+
+```
+# Updater
+
+An updater represents a function from a node to an updated version
+of itself. The `updater` function takes an updater and returns an
+equivalent function.
+
+Functions are taken as updaters.
+```clojure
+(fact
+ (let [u (lk/updater inc)]
+   (u 1) => 2))
+
+```
+Scalars update any value to themselves.
+```clojure
+(fact
+ (let [u (lk/updater 3)]
+   (u "foo") => 3))
+
+```
+Vectors update the given value by applying its elements one by one,
+in order.
+```clojure
+(fact
+ (let [u (lk/updater [#(str % " hello")
+                      #(str % " world")])]
+   (u "foo") => "foo hello world"))
+
+```
+A map applies updaters to the respective fields of the node.
+```clojure
+(fact
+ (let [u (lk/updater {:foo [inc
+                            #(* % 2)]
+                      :bar dec})]
+   (u {:foo 1 :bar 1}) => {:foo 4 :bar 0}))
+
+```
+## Augmentation Rules
+
+A matcher and an updater are combined to a single function using
+the `aug-rule` function.
+```clojure
+(fact
+ (let [r (lk/aug-rule {:foo #(> % 2)} {:bar inc})]
+   (r {:foo 1 :bar 1} {}) => {:foo 1 :bar 1}
+   (r {:foo 3 :bar 1} {}) => {:foo 3 :bar 2}
+   (r {:bar 1} {:foo 3}) => {:bar 2}))
+
+```
+The function `aug-rule-comp` composes a collection of rule
+functions into a single rule function, which applies these rules in
+order (this works opposite to Clojure's `comp` function, which
+applies the functions in reverse order).
+```clojure
+(fact
+ (let [rules [(lk/aug-rule {:foo #(> % 2)} {:bar inc})
+              (lk/aug-rule {:foo #(<= % 2)} {:bar dec})
+              (lk/aug-rule {:foo 1} {:bar 7})]
+       rule (lk/aug-rule-comp rules)]
+   (rule {:bar 2} {:foo 3}) => {:bar 3}
+   ;; The last rule takes precedence over its predecessors
+   (rule {:bar 2} {:foo 1}) => {:bar 7}))
+
+```
+## Walkers
+
+We wish to apply rules to top-level API objects, as well as to
+sub-objects, such as templates of deployments and stateful-sets,
+and containers of nodes.
+
+Walkers are used to traverse an API object, applying the given rule
+(which can be a composition of rules) to zero or more parts of a
+node.
+
+Walkers are registered under the `:walkers` key of the
+injector. Given an injector with a list of walkers, a rule function
+and an API object, the `apply-aug-rule` function applies the rule
+everywhere the walkers take it.
+
+In the following example, we compose three rules: one that matches
+deployments, one that matches pods and one that matches
+containers. We apply two walkers: one that applies the rule on a
+template, if exists, and one that applies the rule to each
+container, if exists. We expect to see all three kinds of objects:
+deployment, pod and containers, marked accordingly.
+```clojure
+(fact
+ (let [rule (lk/aug-rule-comp [(lk/aug-rule {:kind "Deployment"} {:comment "This is a deployment"})
+                               (lk/aug-rule {:kind "Pod"} {:comment "This is a pod"})
+                               (lk/aug-rule {:kind "Container"} {:comment "This is a container"})])
+       $ {:walkers [(fn [node rule]
+                      (if (contains? (:spec node) :containers)
+                        (update-in node [:spec :containers] #(map (fn [c] (rule c {:kind "Container"})) %))
+                        ;; else
+                        node))
+                    (fn [node rule]
+                       (if (= (:kind node) "Deployment")
+                         (update-in node [:spec :template] rule {:kind "Pod"})
+                         ;; else
+                         node))]}
+       depl (-> (lk/pod :foo {})
+                (lk/add-container :bar "bar-image")
+                (lk/add-container :baz "baz-image")
+                (lk/deployment 3))]
+   (lk/apply-aug-rule $ rule depl)
+   => (-> (lk/pod :foo {})
+          (assoc :comment "This is a pod")
+          (lk/add-container :bar "bar-image" {:comment "This is a container"})
+          (lk/add-container :baz "baz-image" {:comment "This is a container"})
+          (lk/deployment 3)
+          (assoc :comment "This is a deployment"))))
+
+```
+The `standard-descs` function provides walkers that extract
+templates from deployments, and containers from pods.
+```clojure
+(fact
+ (let [rule (lk/aug-rule-comp [(lk/aug-rule {:kind "Deployment"} {:comment "This is a deployment"})
+                               (lk/aug-rule {:kind "Pod"} {:comment "This is a pod"})
+                               (lk/aug-rule {:kind "Container"} {:comment "This is a container"})])
+       $ (-> (lk/injector)
+             (lk/standard-descs))
+       depl (-> (lk/pod :foo {})
+                (lk/add-container :bar "bar-image")
+                (lk/add-container :baz "baz-image")
+                (lk/deployment 3))]
+   (lk/apply-aug-rule $ rule depl)
+   => (-> (lk/pod :foo {})
+          (assoc :comment "This is a pod")
+          (lk/add-container :bar "bar-image" {:comment "This is a container"})
+          (lk/add-container :baz "baz-image" {:comment "This is a container"})
+          (lk/deployment 3)
+          (assoc :comment "This is a deployment"))))
 
 ```
 # Under the Hood
