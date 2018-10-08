@@ -365,6 +365,60 @@ necessary port.
                                "busybox"
                                {:command ["sh" "-c" "while ! nc -z some-service 80; do sleep 1; done"]})))
 
+```
+When the service in question exposes exactly one port, the port
+name argument can be omitted.
+```clojure
+(defn module3 [$]
+  (-> $
+      (lk/rule :some-service [:some-dep]
+               (fn [some-dep]
+                 (-> (lk/pod :some-service {:foo some-dep})
+                     (lk/add-container :quux "some-image")
+                     (lk/deployment 3)
+                     (lk/expose-cluster-ip :some-service
+                                           (lk/port :quux :web 80 80)))))
+      (lk/rule :some-pod [:some-service]
+               (fn [some-service]
+                 (-> (lk/pod :some-pod {:foo :baz})
+                     ;; We omit the :web argument
+                     (lku/wait-for-service-port some-service))))))
+(fact
+ (-> (lk/injector)
+     (lk/standard-descs)
+     (module3)
+     (lk/get-deployable {:some-dep :bar})
+     (last))
+ => (-> (lk/pod :some-pod {:foo :baz})
+        (lk/add-init-container :wait-for-some-service-web
+                               "busybox"
+                               {:command ["sh" "-c" "while ! nc -z some-service 80; do sleep 1; done"]})))
+
+```
+Omitting the port name on a service with more than one port will
+result in an exception being thrown.
+```clojure
+(defn module4 [$]
+  (-> $
+      (lk/rule :some-service [:some-dep]
+               (fn [some-dep]
+                 (-> (lk/pod :some-service {:foo some-dep})
+                     (lk/add-container :quux "some-image")
+                     (lk/deployment 3)
+                     (lk/expose-cluster-ip :some-service
+                                           (comp (lk/port :quux :web 80 80)
+                                                 (lk/port :quux :https 443 443))))))
+      (lk/rule :some-pod [:some-service]
+               (fn [some-service]
+                 (-> (lk/pod :some-pod {:foo :baz})
+                     ;; We omit the :web argument
+                     (lku/wait-for-service-port some-service))))))
+(fact
+ (-> (lk/injector)
+     (lk/standard-descs)
+     (module4)
+     (lk/get-deployable {:some-dep :bar}))
+ => (throws "Port name must be specified when waiting for a service exposing more than one port."))
 
 ```
 # InjectTheDriver
