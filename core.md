@@ -1582,19 +1582,22 @@ is also added to the `:additional` meta-field.
                                         {:z 3}}))
 
 ```
-`:$additional` fields can appear anywhere in the structure.
+`:$additional` fields can appear anywhere in the structure, even
+inside another `:$additional` field.
 ```clojure
 (fact
  (let [ext (lk/extract-additional {:foo :bar
                                    :baz {:x 1
                                          :$additional [{:z 3}]}
                                    :quux [{:p 1
-                                           :$additional [{:y 2}]}]})]
+                                           :$additional [{:y 2
+                                                          :$additional [{:w 3}]}]}]})]
    ext => {:foo :bar
            :baz {:x 1}
            :quux [{:p 1}]}
-   (set (-> ext meta :additional)) => #{{:z 3}
-                                        {:y 2}}))
+   (-> ext meta :additional) => [{:z 3}
+                                 {:y 2}
+                                 {:w 3}]))
 
 ```
 

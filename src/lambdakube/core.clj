@@ -19,7 +19,6 @@
                      additions-from-fields (mapcat (fn [[k v]] (-> v meta :additional)) obj)
                      explicit-additions (:$additional obj)
                      additional (concat explicit-additions
-                                        (mapcat #(-> % meta :additional) explicit-additions)
                                         additions-from-fields)]
                  (with-meta (dissoc obj :$additional)
                    {:additional additional}))
