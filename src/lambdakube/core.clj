@@ -249,31 +249,106 @@
          (map #(describe-single % descs))
          (reduce merge {}))))
 
-(defn get-deployable [{:keys [rules descs]} config]
-  (let [rules (sorted-rules rules)]
-    (loop [rules rules
-           config config
-           out []]
-      (if (empty? rules)
-        out
-        ;; else
-        (let [rule (first rules)]
-          (if (nil? rule)
-            (recur (rest rules) config out)
-            ;; else
-            (let [[func deps res] rule
-                  [out config] (if (every? (partial contains? config) deps)
-                                 (if (contains? config res)
-                                   (throw (Exception. (str "Conflicting prerequisites for resource " res)))
-                                   ;; else
-                                   (let [api-obj (apply func (map config deps))
-                                         desc (describe api-obj descs)
-                                         extracted (extract-additional api-obj)]
-                                     [(concat out [extracted] (-> extracted meta :additional))
-                                      (assoc config res desc)]))
-                                 ;; else
-                                 [out config])]
-              (recur (rest rules) config out))))))))
+(defn matcher [m]
+  (cond
+    (fn? m) (let [arity (-> m class
+                            .getDeclaredMethods
+                            first
+                            .getParameterTypes
+                            count)]
+              (case arity
+                2 m
+                1 (fn [node ctx]
+                    (m node))
+                (throw (Exception. (str "Invalid matcher arity: " arity)))))
+    (map? m) (fn [node ctx]
+               (every? identity (for [[k v] m]
+                                  (let [node (merge ctx node)
+                                        m' (matcher v)]
+                                    (and (contains? node k)
+                                         (m' (node k) (ctx k)))))))
+    (set? m) (fn [node ctx]
+               (every? (fn [m'] ((matcher m') node ctx)) m))
+    (keyword? m) (fn [node ctx]
+                   (cond
+                     (map? node) (contains? node m)
+                     (string? node) (= node (name m))
+                     :else (= node m)))
+    (instance? Pattern m) (fn [node ctx]
+                            (if (string? node)
+                              (not (nil? (re-matches m node)))
+                              ;; else
+                              false))
+    :else (fn [node ctx]
+            (= node m))))
+
+(defn updater [u]
+  (cond
+    (fn? u) u
+    (vector? u) (->> u reverse (apply comp))
+    (map? u) (updater (vec (for [[k v] u]
+                             #(update % k (updater v)))))
+    :else (constantly u)))
+
+(defn aug-rule [m u]
+  (fn [node ctx]
+    (if ((matcher m) node ctx)
+      ((updater u) node)
+      ;; else
+      node)))
+
+(defn aug-rule-comp [rules]
+  (let [f (fn [ctx]
+            (apply comp (for [rule (reverse rules)]
+                          #(rule % ctx))))]
+    (fn [node ctx]
+      ((f ctx) node))))
+
+(defn aug-rules [rules]
+  (aug-rule-comp (map #(apply aug-rule %) rules)))
+
+(defn apply-aug-rule [$ rule node]
+  (let [rule' (fn rule' [node ctx]
+                (let [node (rule node ctx)]
+                  (loop [node node
+                         walkers (:walkers $)]
+                    (if (empty? walkers)
+                      node
+                      ;; else
+                      (let [node ((first walkers) node rule' ctx)]
+                        (recur node (rest walkers)))))))]
+    (rule' node {})))
+
+(defn get-deployable
+  ([{:keys [rules descs]} config]
+   (let [rules (sorted-rules rules)]
+     (loop [rules rules
+            config config
+            out []]
+       (if (empty? rules)
+         out
+         ;; else
+         (let [rule (first rules)]
+           (if (nil? rule)
+             (recur (rest rules) config out)
+             ;; else
+             (let [[func deps res] rule
+                   [out config] (if (every? (partial contains? config) deps)
+                                  (if (contains? config res)
+                                    (throw (Exception. (str "Conflicting prerequisites for resource " res)))
+                                    ;; else
+                                    (let [api-obj (apply func (map config deps))
+                                          desc (describe api-obj descs)
+                                          extracted (extract-additional api-obj)]
+                                      [(concat out [extracted] (-> extracted meta :additional))
+                                       (assoc config res desc)]))
+                                  ;; else
+                                  [out config])]
+               (recur (rest rules) config out))))))))
+  ([$ config rules]
+   (let [deployable (get-deployable $ config)
+         rule (aug-rules rules)]
+     (map #(apply-aug-rule $ rule %) deployable))))
 
 (defn desc [$ func]
   (update $ :descs conj func))
@@ -316,14 +391,28 @@
                                [name port])
                              (into {}))})))
       (update :walkers concat
-              [(fn [node rule]
-                 (if (contains? (:spec node) :containers)
-                   (update-in node [:spec :containers] #(map (fn [c] (rule c {:kind "Container"})) %))
+              [(fn [node rule ctx]
+                 (if (and (contains? node :spec)
+                          (contains? (:spec node) :template))
+                   (update-in node [:spec :template] rule (-> ctx
+                                                              (merge {:kind "Pod"
+                                                                      :metadata (:metadata node)})))
                    ;; else
                    node))
-               (fn [node rule]
-                 (if (= (:kind node) "Deployment")
-                   (update-in node [:spec :template] rule {:kind "Pod"})
+               (fn [node rule ctx]
+                 (if (and (= (:kind (merge node ctx)) "Pod")
+                          (contains? (:spec node) :containers))
+                   (update-in node [:spec :containers] #(map (fn [c]
+                                                               (rule c (-> ctx
+                                                                                 (merge {:kind "Container"})))) %))
+                   ;; else
+                   node))
+               (fn [node rule ctx]
+                 (if (and (= (:kind (merge node ctx)) "Pod")
+                          (contains? (:spec node) :initContainers))
+                   (update-in node [:spec :initContainers] #(map (fn [c]
+                                                                   (rule c (-> ctx
+                                                                               (merge {:kind "InitContainer"})))) %))
                    ;; else
                    node))])))
 
@@ -336,71 +425,4 @@
         nodes
         ;; else
         (recur nodes')))))
-
-(defn matcher [m]
-  (cond
-    (fn? m) (let [arity (-> m class
-                            .getDeclaredMethods
-                            first
-                            .getParameterTypes
-                            count)]
-              (case arity
-                2 m
-                1 (fn [node ctx]
-                    (m node))
-                (throw (Exception. (str "Invalid matcher arity: " arity)))))
-    (map? m) (fn [node ctx]
-               (every? identity (for [[k v] m]
-                                  (let [node (merge ctx node)
-                                        m' (matcher v)]
-                                    (and (contains? node k)
-                                         (m' (node k) ctx))))))
-    (set? m) (fn [node ctx]
-               (every? (fn [m'] ((matcher m') node ctx)) m))
-    (keyword? m) (fn [node ctx]
-                   (contains? node m))
-    (instance? Pattern m) (fn [node ctx]
-                            (if (string? node)
-                              (not (nil? (re-matches m node)))
-                              ;; else
-                              false))
-    :else (fn [node ctx]
-            (= node m))))
-
-(defn updater [u]
-  (cond
-    (fn? u) u
-    (vector? u) (->> u reverse (apply comp))
-    (map? u) (updater (vec (for [[k v] u]
-                             #(update % k (updater v)))))
-    :else (constantly u)))
-
-(defn aug-rule [m u]
-  (fn [node ctx]
-    (if ((matcher m) node ctx)
-      ((updater u) node)
-      ;; else
-      node)))
-
-(defn aug-rule-comp [rules]
-  (let [f (fn [ctx]
-            (apply comp (for [rule (reverse rules)]
-                          #(rule % ctx))))]
-    (fn [node ctx]
-      ((f ctx) node))))
-
-(defn aug-rules [rules]
-  (aug-rule-comp (map #(apply aug-rule %) rules)))
-
-(defn apply-aug-rule [$ rule node]
-  (let [rule' (fn rule' [node ctx]
-                (let [node (rule node ctx)]
-                  (loop [node node
-                         walkers (:walkers $)]
-                    (if (empty? walkers)
-                      node
-                      ;; else
-                      (let [node ((first walkers) node rule')]
-                        (recur node (rest walkers)))))))]
-    (rule' node {})))
 
