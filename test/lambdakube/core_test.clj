@@ -1319,6 +1319,17 @@ spec:
    (.exists f) => true
    (slurp f) => "foo: bar"))
 
+;; `kube-apply` optionally takes `namespace` and `kubeconfig` parameter to modify your deploy location.
+(fact
+ (let [f (io/file "foo.yaml")]
+   (when (.exists f)
+     (.delete f))
+   (lk/kube-apply "foo: bar" f "default" "default") => irrelevant
+   (provided
+    (sh/sh "kubectl" "apply" "--namespace=default" "--kubeconfig=default" "-f" "foo.yaml" ) => {:exit 0})
+   (.exists f) => true
+   (slurp f) => "foo: bar"))
+
 ;; If the file already exists, and has the exact same content as the
 ;; given string, nothing happens.
 (fact
