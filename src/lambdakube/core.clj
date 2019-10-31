@@ -358,14 +358,23 @@
        (map #(yaml/generate-string % :dumper-options {:flow-style :block :scalar-style :plain}))
        (str/join "---\n")))
 
-(defn kube-apply [content file]
-  (when-not (and (.exists file)
-                 (= (slurp file) content))
-    (spit file content)
-    (let [res (sh/sh "kubectl" "apply" "-f" (str file))]
-      (when-not (= (:exit res) 0)
-        (.delete file)
-        (throw (Exception. (:err res)))))))
+
+(defn kube-apply
+  ([content file]
+   (kube-apply content file nil nil))
+  ([content file kube-namespace]
+   (kube-apply content kube-namespace nil))
+  ([content file kube-namespace kube-config]
+   (let [namespace-param (if (nil? kube-namespace) nil (str "--namespace=" kube-namespace))
+         config-param (if (nil? kube-config) nil (str "--kubeconfig=" kube-config))]
+     (when-not (and (.exists file)
+                    (= (slurp file) content))
+       (spit file content)
+       (let [res (apply sh/sh (remove nil? ["kubectl" "apply" namespace-param config-param "-f" (str file)]))]
+         (when-not (= (:exit res) 0)
+           (.delete file)
+           (throw (Exception. (:err res)))))))))
+
 
 (defn port
   ([cont portname podport]
