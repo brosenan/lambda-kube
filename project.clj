@@ -9,7 +9,7 @@
                  [org.clojure/data.json "0.2.6"]
                  [org.clojure/data.xml "0.0.8"]
                  [digest "1.4.8"]]
-  :profiles {:dev {:dependencies [[midje "1.9.2"]]
+  :profiles {:dev {:dependencies [[midje "1.9.9"]]
                    :plugins [[lein-midje "3.2.1"]
                              [lein-auto "0.1.3"]]}}
   :deploy-repositories [["releases" :clojars]])
