@@ -131,10 +131,12 @@
                          %)))))
 
 (defn- mount-func [name mounts]
-  (apply comp (for [[cont path] mounts]
-                #(update-container % cont field-conj :volumeMounts
-                                   {:name name
-                                    :mountPath path}))))
+  (apply comp (for [[cont path-or-opts] mounts]
+                #(lk/update-container % cont field-conj :volumeMounts
+                                   (if (map? path-or-opts)
+                                     (into path-or-opts {:name name})
+                                     {:name name
+                                      :mountPath-Or-Opts path-or-opts})))))
 
 (defn add-volume [pod name spec mounts]
   (-> pod
